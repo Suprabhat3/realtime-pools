@@ -1,0 +1,66 @@
+# Dependencies
+node_modules/
+
+# Build files
+dist/
+build/
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Prisma
+prisma/dev.db
+prisma/dev.db-journal
+prisma/*.db
+prisma/*.db-journal
+
+# Generated Prisma client (optional)
+# Remove this if you want to commit generated client
+node_modules/.prisma
+
+# TypeScript
+*.tsbuildinfo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE / Editor
+.vscode/
+.idea/
+
+# Coverage
+coverage/
+
+# Temporary files
+.tmp/
+.temp/
+
+# Cache
+.cache/
+
+# PM2
+.pm2/
+
+# Docker
+docker-data/
+
+# Turbo / Monorepo
+.turbo/
+
+# Testing
+playwright-report/
+test-results/
+
+# Misc
+*.pem
