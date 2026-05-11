@@ -60,8 +60,10 @@ export const fetchGoogleProfile = async (req: Request, code: string): Promise<Go
 
   return {
     email: payload.email,
-    name: payload.name ?? undefined,
-    picture: payload.picture ?? undefined,
-    emailVerified: payload.email_verified ?? undefined
+    ...(payload.name ? { name: payload.name } : {}),
+    ...(payload.picture ? { picture: payload.picture } : {}),
+    ...(typeof payload.email_verified === "boolean"
+      ? { emailVerified: payload.email_verified }
+      : {})
   };
 };

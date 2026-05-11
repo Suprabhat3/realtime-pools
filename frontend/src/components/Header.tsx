@@ -24,6 +24,9 @@ const Header = () => {
         {isAuthenticated ? (
           <>
             <span className="hidden md:inline text-gray-500">{user?.email ?? "Signed in"}</span>
+            <NavLink to="/profile" className="hover:text-gray-900 transition-colors">
+              Profile
+            </NavLink>
             <a
               href="/dashboard"
               className="bg-brand-crimson hover:bg-brand-crimson-hover text-white px-4 py-2.5 font-bold rounded-none shadow hover:-translate-y-0.5 transition-transform"

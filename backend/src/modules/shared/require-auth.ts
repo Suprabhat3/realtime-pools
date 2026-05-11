@@ -16,8 +16,8 @@ const parseAuthUser = (token: string | null): AuthUser | null => {
 
   return {
     id: payload.sub,
-    email: payload.email,
-    name: payload.name
+    ...(payload.email ? { email: payload.email } : {}),
+    ...(payload.name ? { name: payload.name } : {})
   };
 };
 

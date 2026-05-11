@@ -10,6 +10,7 @@ import ForgotPasswordPage from "./auth/ForgotPasswordPage";
 import SignInPage from "./auth/SignInPage";
 import SignUpPage from "./auth/SignUpPage";
 import ResetPasswordPage from "./auth/ResetPasswordPage";
+import ProfilePage from "./pages/ProfilePage";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -21,6 +22,7 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
+          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/auth/success" element={<AuthSuccessPage />} />
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

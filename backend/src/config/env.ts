@@ -14,6 +14,9 @@ const envSchema = z.object({
   RESEND_FROM_EMAIL: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
+  IMAGEKIT_PUBLIC_KEY: z.string().min(1),
+  IMAGEKIT_PRIVATE_KEY: z.string().min(1),
+  IMAGEKIT_URL_ENDPOINT: z.string().min(1),
   FRONTEND_URL: z.url(),
   ALLOWED_ORIGINS: z.string().optional()
 });

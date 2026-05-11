@@ -25,6 +25,12 @@ const addDays = (days: number): Date => {
   return new Date(Date.now() + days * 24 * 60 * 60 * 1000);
 };
 
+const toAuthUser = (user: { id: string; email: string; name: string | null }): AuthUser => ({
+  id: user.id,
+  email: user.email,
+  ...(user.name ? { name: user.name } : {})
+});
+
 export const createUser = async (name: string, email: string, password: string): Promise<AuthUser> => {
   const normalizedEmail = normalizeEmail(email);
   const existingUser = await prisma.user.findUnique({ where: { email: normalizedEmail } });
@@ -42,7 +48,7 @@ export const createUser = async (name: string, email: string, password: string):
     }
   });
 
-  return { id: user.id, email: user.email, name: user.name ?? undefined };
+  return toAuthUser(user);
 };
 
 export const verifyPassword = async (email: string, password: string): Promise<AuthUser> => {
@@ -58,7 +64,7 @@ export const verifyPassword = async (email: string, password: string): Promise<A
     throw new HttpError(401, "Invalid credentials");
   }
 
-  return { id: user.id, email: user.email, name: user.name ?? undefined };
+  return toAuthUser(user);
 };
 
 export const sendLoginOtp = async (user: AuthUser): Promise<void> => {
@@ -117,7 +123,7 @@ export const verifyLoginOtp = async (email: string, code: string): Promise<AuthU
     data: { consumedAt: new Date() }
   });
 
-  return { id: user.id, email: user.email, name: user.name ?? undefined };
+  return toAuthUser(user);
 };
 
 export const issueTokens = async (user: AuthUser): Promise<{ accessToken: string; refreshToken: string }> => {
@@ -162,11 +168,7 @@ export const rotateRefreshToken = async (refreshToken: string): Promise<AuthUser
     data: { revokedAt: new Date() }
   });
 
-  return {
-    id: storedToken.user.id,
-    email: storedToken.user.email,
-    name: storedToken.user.name ?? undefined
-  };
+  return toAuthUser(storedToken.user);
 };
 
 export const revokeRefreshToken = async (refreshToken: string): Promise<void> => {
@@ -261,7 +263,7 @@ export const findOrCreateGoogleUser = async (profile: GoogleProfile): Promise<Au
       updates.name = profile.name;
     }
 
-    if (!existingUser.image && profile.picture) {
+    if (profile.picture && existingUser.image !== profile.picture) {
       updates.image = profile.picture;
     }
 
@@ -275,7 +277,7 @@ export const findOrCreateGoogleUser = async (profile: GoogleProfile): Promise<Au
     return {
       id: existingUser.id,
       email: existingUser.email,
-      name: existingUser.name ?? profile.name ?? undefined
+      ...((existingUser.name ?? profile.name) ? { name: existingUser.name ?? profile.name } : {})
     };
   }
 
@@ -291,9 +293,5 @@ export const findOrCreateGoogleUser = async (profile: GoogleProfile): Promise<Au
     }
   });
 
-  return {
-    id: user.id,
-    email: user.email,
-    name: user.name ?? undefined
-  };
+  return toAuthUser(user);
 };

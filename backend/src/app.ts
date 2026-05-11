@@ -11,6 +11,8 @@ import { healthRouter } from "./modules/health/health.routes";
 import { authRouter } from "./modules/auth/auth.routes";
 import { pollsRouter } from "./modules/polls/polls.routes";
 import { publicRouter } from "./modules/public/public.routes";
+import { uploadsRouter } from "./modules/uploads/uploads.routes";
+import { usersRouter } from "./modules/users/users.routes";
 
 export const createApp = (): Express => {
   const app = express();
@@ -49,6 +51,8 @@ export const createApp = (): Express => {
 
   app.use(healthRouter);
   app.use("/api/auth", authRouter);
+  app.use("/api/uploads", uploadsRouter);
+  app.use("/api/users", usersRouter);
   app.use("/api/polls", pollsRouter);
   app.use("/api/public", publicRouter);
 
