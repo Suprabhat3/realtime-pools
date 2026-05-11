@@ -1,0 +1,142 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ResponseMode {
+  ANONYMOUS
+  AUTHENTICATED
+}
+
+model User {
+  id        String       @id @default(cuid())
+  email     String       @unique
+  passwordHash String
+  name      String?
+  image     String?
+  polls     Poll[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  submissions Submission[] @relation("RespondentSubmissions")
+  loginOtps   LoginOtp[]
+  refreshTokens RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+}
+
+model LoginOtp {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  codeHash   String
+  expiresAt  DateTime
+  consumedAt DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  expiresAt  DateTime
+  revokedAt  DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id         String   @id @default(cuid())
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash  String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model Poll {
+  id           String       @id @default(cuid())
+  slug         String       @unique
+  creatorId    String
+  creator      User         @relation(fields: [creatorId], references: [id], onDelete: Cascade)
+  title        String
+  description  String?
+  responseMode ResponseMode
+  expiresAt    DateTime
+  isPublished  Boolean      @default(false)
+  createdAt    DateTime     @default(now())
+  updatedAt    DateTime     @updatedAt
+
+  questions    Question[]
+  submissions  Submission[]
+
+  @@index([creatorId])
+  @@index([expiresAt])
+}
+
+model Question {
+  id         String   @id @default(cuid())
+  pollId     String
+  poll       Poll     @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  text       String
+  isRequired Boolean  @default(true)
+  orderIndex Int
+  options    Option[]
+  answers    Answer[]
+
+  @@index([pollId])
+  @@unique([pollId, orderIndex])
+}
+
+model Option {
+  id         String   @id @default(cuid())
+  questionId String
+  question   Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  label      String
+  orderIndex Int
+  answers    Answer[]
+
+  @@index([questionId])
+  @@unique([questionId, orderIndex])
+}
+
+model Submission {
+  id              String    @id @default(cuid())
+  pollId          String
+  poll            Poll      @relation(fields: [pollId], references: [id], onDelete: Cascade)
+  respondentUserId String?
+  respondentUser  User?     @relation("RespondentSubmissions", fields: [respondentUserId], references: [id], onDelete: SetNull)
+  isAnonymous     Boolean
+  submittedAt     DateTime  @default(now())
+  answers         Answer[]
+
+  @@index([pollId])
+  @@index([respondentUserId])
+  @@unique([pollId, respondentUserId])
+}
+
+model Answer {
+  id           String     @id @default(cuid())
+  submissionId String
+  submission   Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  questionId   String
+  question     Question   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  optionId     String
+  option       Option     @relation(fields: [optionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+  @@index([optionId])
+  @@unique([submissionId, questionId])
+}
