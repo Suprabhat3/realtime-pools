@@ -1,0 +1,113 @@
+import { useState } from "react";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
+
+import BackgroundElements from "../components/BackgroundElements";
+import Header from "../components/Header";
+import { resetPassword } from "../lib/auth-api";
+
+const ResetPasswordPage = () => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const token = searchParams.get("token") ?? "";
+
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [infoMessage, setInfoMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setInfoMessage(null);
+
+    if (!token) {
+      setErrorMessage("Reset token is missing");
+      setIsSubmitting(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      setErrorMessage("Passwords do not match");
+      setIsSubmitting(false);
+      return;
+    }
+
+    try {
+      const result = await resetPassword(token, password);
+      setInfoMessage(result.message);
+      setTimeout(() => navigate("/signin"), 1200);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Unable to reset password";
+      setErrorMessage(message);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  return (
+    <div className="relative min-h-screen flex flex-col overflow-x-hidden">
+      <BackgroundElements />
+      <Header />
+      <main className="relative z-10 flex grow items-center justify-center px-4 py-10">
+        <section className="w-full max-w-md border border-gray-200 bg-white/85 backdrop-blur-sm p-8 shadow-sm">
+          <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-crimson">Set a new password</p>
+          <h1 className="mt-2 text-3xl font-bold text-gray-900">Reset your password</h1>
+          <p className="mt-2 text-sm text-gray-600">
+            Enter a new password to regain access to your account.
+          </p>
+
+          <form className="mt-8 space-y-4" onSubmit={onSubmit}>
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-gray-700">New password</span>
+              <input
+                type="password"
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                className="w-full border border-gray-300 bg-white px-3 py-2.5 outline-none focus:border-brand-crimson"
+                placeholder="At least 8 characters"
+                minLength={8}
+                required
+                autoComplete="new-password"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-2 block text-sm font-semibold text-gray-700">Confirm new password</span>
+              <input
+                type="password"
+                value={confirmPassword}
+                onChange={(event) => setConfirmPassword(event.target.value)}
+                className="w-full border border-gray-300 bg-white px-3 py-2.5 outline-none focus:border-brand-crimson"
+                placeholder="Repeat password"
+                minLength={8}
+                required
+                autoComplete="new-password"
+              />
+            </label>
+
+            {errorMessage ? <p className="text-sm text-red-700">{errorMessage}</p> : null}
+            {infoMessage ? <p className="text-sm text-emerald-700">{infoMessage}</p> : null}
+
+            <button
+              type="submit"
+              disabled={isSubmitting}
+              className="w-full bg-brand-crimson px-4 py-3 text-sm font-bold text-white transition hover:bg-brand-crimson-hover disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isSubmitting ? "Updating..." : "Update password"}
+            </button>
+          </form>
+
+          <p className="mt-6 text-sm text-gray-600">
+            <Link to="/signin" className="font-bold text-brand-crimson hover:text-brand-crimson-hover">
+              Back to sign in
+            </Link>
+          </p>
+        </section>
+      </main>
+    </div>
+  );
+};
+
+export default ResetPasswordPage;
