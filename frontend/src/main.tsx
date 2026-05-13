@@ -12,6 +12,12 @@ import SignUpPage from "./auth/SignUpPage";
 import ResetPasswordPage from "./auth/ResetPasswordPage";
 import ProfilePage from "./pages/ProfilePage";
 
+import Layout from "./components/Layout";
+import DashboardPage from "./pages/DashboardPage";
+import CreatePollPage from "./pages/CreatePollPage";
+import ExplorerPage from "./pages/ExplorerPage";
+import PollDetailsPage from "./pages/PollDetailsPage";
+
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
     <AuthProvider>
@@ -22,8 +28,17 @@ createRoot(document.getElementById("root")!).render(
           <Route path="/signup" element={<SignUpPage />} />
           <Route path="/forgot-password" element={<ForgotPasswordPage />} />
           <Route path="/reset-password" element={<ResetPasswordPage />} />
-          <Route path="/profile" element={<ProfilePage />} />
           <Route path="/auth/success" element={<AuthSuccessPage />} />
+          
+          <Route element={<Layout />}>
+            <Route path="/profile" element={<ProfilePage />} />
+            <Route path="/dashboard" element={<DashboardPage />} />
+            <Route path="/create" element={<CreatePollPage />} />
+            <Route path="/explorer" element={<ExplorerPage />} />
+            <Route path="/p/:slug" element={<PollDetailsPage />} />
+            <Route path="/p/:slug/results" element={<PollDetailsPage />} />
+          </Route>
+
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
