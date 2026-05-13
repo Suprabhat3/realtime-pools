@@ -11,6 +11,7 @@ import SignInPage from "./auth/SignInPage";
 import SignUpPage from "./auth/SignUpPage";
 import ResetPasswordPage from "./auth/ResetPasswordPage";
 import ProfilePage from "./pages/ProfilePage";
+import ProtectedRoute from "./auth/ProtectedRoute";
 
 import Layout from "./components/Layout";
 import DashboardPage from "./pages/DashboardPage";
@@ -32,8 +33,22 @@ createRoot(document.getElementById("root")!).render(
           
           <Route element={<Layout />}>
             <Route path="/profile" element={<ProfilePage />} />
-            <Route path="/dashboard" element={<DashboardPage />} />
-            <Route path="/create" element={<CreatePollPage />} />
+            <Route
+              path="/dashboard"
+              element={
+                <ProtectedRoute>
+                  <DashboardPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/create"
+              element={
+                <ProtectedRoute>
+                  <CreatePollPage />
+                </ProtectedRoute>
+              }
+            />
             <Route path="/explorer" element={<ExplorerPage />} />
             <Route path="/p/:slug" element={<PollDetailsPage />} />
             <Route path="/p/:slug/results" element={<PollDetailsPage />} />

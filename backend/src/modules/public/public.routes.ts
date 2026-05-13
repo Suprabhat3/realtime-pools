@@ -4,7 +4,12 @@ import type { Router as ExpressRouter } from "express";
 import { getSocketServer } from "../realtime/socket";
 import { optionalAuth } from "../shared/require-auth";
 import { publicSubmissionSchema } from "./public.schemas";
-import { getPublicPoll, getPublicPollResults, submitPublicResponse } from "./public.service";
+import {
+  getPublicPoll,
+  getPublicPollResults,
+  listPublicPolls,
+  submitPublicResponse
+} from "./public.service";
 
 export const publicRouter: ExpressRouter = Router();
 
@@ -13,6 +18,17 @@ const getSingleParam = (value: string | string[] | undefined): string | null => 
   if (Array.isArray(value) && value.length > 0 && value[0]) return value[0];
   return null;
 };
+
+// GET /api/public/polls?category=Technology
+publicRouter.get("/polls", async (req, res, next) => {
+  try {
+    const category = getSingleParam(req.query.category as string | string[] | undefined) ?? undefined;
+    const polls = await listPublicPolls(category);
+    res.status(200).json({ data: polls });
+  } catch (error) {
+    next(error);
+  }
+});
 
 publicRouter.get("/polls/:slug", async (req, res, next) => {
   try {

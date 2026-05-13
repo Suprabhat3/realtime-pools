@@ -11,6 +11,7 @@ type PublicPollRecord = Prisma.PollGetPayload<{
       orderBy: { orderIndex: "asc" };
       include: { options: { orderBy: { orderIndex: "asc" } } };
     };
+    creator: { select: { name: true; image: true } };
   };
 }>;
 
@@ -26,9 +27,15 @@ const mapPublicPoll = (poll: PublicPollRecord) => {
     description: poll.description,
     responseMode: poll.responseMode,
     isPublished: poll.isPublished,
+    isPublic: poll.isPublic,
     expiresAt: poll.expiresAt.toISOString(),
+    createdAt: poll.createdAt.toISOString(),
     isExpired: expired,
     state: poll.isPublished ? "published" : expired ? "expired" : "active",
+    creator: {
+      name: poll.creator.name,
+      image: poll.creator.image
+    },
     questions: poll.questions.map((question) => ({
       id: question.id,
       text: question.text,
@@ -52,6 +59,9 @@ const getPollBySlug = async (slug: string) => {
             orderBy: { orderIndex: "asc" }
           }
         }
+      },
+      creator: {
+        select: { name: true, image: true }
       }
     }
   });
@@ -61,6 +71,53 @@ const getPollBySlug = async (slug: string) => {
   }
 
   return poll;
+};
+
+export const listPublicPolls = async (category?: string) => {
+  const where: Prisma.PollWhereInput = {
+    isPublic: true,
+    isPublished: false, // still accepting votes (not closed)
+    expiresAt: { gt: new Date() } // not expired
+  };
+
+  const polls = await prisma.poll.findMany({
+    where,
+    orderBy: { createdAt: "desc" },
+    take: 50,
+    include: {
+      questions: {
+        orderBy: { orderIndex: "asc" },
+        include: { options: { orderBy: { orderIndex: "asc" } } }
+      },
+      creator: { select: { name: true, image: true } },
+      _count: { select: { submissions: true } }
+    }
+  });
+
+  return polls
+    .filter((poll) => {
+      if (!category || category === "All Topics") return true;
+      // Category is encoded in description as "Category: <name>"
+      return poll.description?.includes(`Category: ${category}`);
+    })
+    .map((poll) => ({
+      id: poll.id,
+      slug: poll.slug,
+      title: poll.title,
+      description: poll.description,
+      responseMode: poll.responseMode,
+      expiresAt: poll.expiresAt.toISOString(),
+      createdAt: poll.createdAt.toISOString(),
+      totalVotes: poll._count.submissions,
+      creator: { name: poll.creator.name, image: poll.creator.image },
+      firstQuestion: poll.questions[0]
+        ? {
+            id: poll.questions[0].id,
+            text: poll.questions[0].text,
+            options: poll.questions[0].options.map((o) => ({ id: o.id, label: o.label }))
+          }
+        : null
+    }));
 };
 
 export const getPublicPoll = async (slug: string) => {
@@ -80,11 +137,11 @@ export const submitPublicResponse = async (
   }
 
   if (poll.isPublished) {
-    throw new HttpError(400, "Poll is already published and closed for responses");
+    throw new HttpError(400, "Poll is already closed for responses");
   }
 
   if (poll.responseMode === "AUTHENTICATED" && !user) {
-    throw new HttpError(401, "Authentication required for this poll");
+    throw new HttpError(401, "You must be signed in to vote on this poll");
   }
 
   const answerMap = new Map<string, string>();
@@ -110,25 +167,33 @@ export const submitPublicResponse = async (
   }
 
   const isAnonymousSubmission =
-    poll.responseMode === "ANONYMOUS" ? payload.submitAsAnonymous : false;
+    poll.responseMode === "ANONYMOUS" ? (payload.submitAsAnonymous ?? true) : false;
 
   const respondentUserId = !isAnonymousSubmission && user ? user.id : null;
 
   if (poll.responseMode === "AUTHENTICATED" && !respondentUserId) {
-    throw new HttpError(401, "Authentication required for this poll");
+    throw new HttpError(401, "You must be signed in to vote on this poll");
   }
 
+  // Dedup for authenticated users: DB unique constraint handles it
   if (respondentUserId) {
     const existing = await prisma.submission.findFirst({
-      where: {
-        pollId: poll.id,
-        respondentUserId
-      },
+      where: { pollId: poll.id, respondentUserId },
       select: { id: true }
     });
-
     if (existing) {
-      throw new HttpError(409, "You have already submitted this poll");
+      throw new HttpError(409, "You have already voted on this poll");
+    }
+  }
+
+  // Dedup for anonymous users via fingerprintId
+  if (isAnonymousSubmission && payload.fingerprintId) {
+    const existing = await prisma.submission.findFirst({
+      where: { pollId: poll.id, fingerprintId: payload.fingerprintId },
+      select: { id: true }
+    });
+    if (existing) {
+      throw new HttpError(409, "You have already voted on this poll");
     }
   }
 
@@ -137,10 +202,7 @@ export const submitPublicResponse = async (
 
     for (const question of poll.questions) {
       const optionId = answerMap.get(question.id);
-      if (!optionId) {
-        continue;
-      }
-
+      if (!optionId) continue;
       answerCreates.push({ questionId: question.id, optionId });
     }
 
@@ -148,41 +210,29 @@ export const submitPublicResponse = async (
       data: {
         pollId: poll.id,
         respondentUserId,
+        fingerprintId: isAnonymousSubmission ? (payload.fingerprintId ?? null) : null,
         isAnonymous: isAnonymousSubmission,
-        answers: {
-          create: answerCreates
-        }
+        answers: { create: answerCreates }
       }
     });
 
-    const totalResponses = await tx.submission.count({
-      where: { pollId: poll.id }
-    });
+    const totalResponses = await tx.submission.count({ where: { pollId: poll.id } });
 
-    return {
-      submissionId: submission.id,
-      pollId: poll.id,
-      totalResponses
-    };
+    return { submissionId: submission.id, pollId: poll.id, totalResponses };
   });
 
-  return {
-    ...submitted,
-    submittedAt: nowIso()
-  };
+  return { ...submitted, submittedAt: nowIso() };
 };
 
 export const getPublicPollResults = async (slug: string) => {
   const poll = await getPollBySlug(slug);
 
-  if (!poll.isPublished) {
-    throw new HttpError(403, "Poll results are not published yet");
-  }
-
+  // Results are always visible (caller controls when to show them in the UI)
   const submissions = await prisma.submission.findMany({
     where: { pollId: poll.id },
     include: {
-      answers: true
+      answers: true,
+      respondentUser: { select: { id: true, name: true, email: true } }
     }
   });
 
@@ -195,13 +245,9 @@ export const getPublicPollResults = async (slug: string) => {
     }
 
     let answeredCount = 0;
-
     for (const submission of submissions) {
       const answer = submission.answers.find((entry) => entry.questionId === question.id);
-      if (!answer) {
-        continue;
-      }
-
+      if (!answer) continue;
       answeredCount += 1;
       optionCounts.set(answer.optionId, (optionCounts.get(answer.optionId) ?? 0) + 1);
     }
@@ -222,6 +268,17 @@ export const getPublicPollResults = async (slug: string) => {
     };
   });
 
+  // Return voter list for AUTHENTICATED polls
+  const voters =
+    poll.responseMode === "AUTHENTICATED"
+      ? submissions
+          .filter((s) => s.respondentUser)
+          .map((s) => ({
+            name: s.respondentUser!.name ?? s.respondentUser!.email ?? "User",
+            submittedAt: s.submittedAt.toISOString()
+          }))
+      : undefined;
+
   return {
     poll: {
       id: poll.id,
@@ -230,11 +287,11 @@ export const getPublicPollResults = async (slug: string) => {
       description: poll.description,
       responseMode: poll.responseMode,
       expiresAt: poll.expiresAt.toISOString(),
+      isPublished: poll.isPublished,
       publishedAt: poll.updatedAt.toISOString()
     },
-    overview: {
-      totalResponses
-    },
+    overview: { totalResponses },
+    voters,
     questions: questionSummaries,
     updatedAt: nowIso()
   };

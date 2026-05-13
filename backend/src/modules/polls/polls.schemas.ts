@@ -12,6 +12,7 @@ export const createPollSchema = z.object({
   title: z.string().trim().min(3).max(120),
   description: z.string().trim().max(1000).optional(),
   responseMode: z.enum(["ANONYMOUS", "AUTHENTICATED"]),
+  isPublic: z.boolean().optional().default(true),
   expiresAt: z.iso.datetime(),
   questions: z.array(questionSchema).min(1).max(30)
 });

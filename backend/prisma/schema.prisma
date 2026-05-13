@@ -91,6 +91,7 @@ model Poll {
   responseMode ResponseMode
   expiresAt    DateTime
   isPublished  Boolean      @default(false)
+  isPublic     Boolean      @default(true)
   createdAt    DateTime     @default(now())
   updatedAt    DateTime     @updatedAt
 
@@ -99,6 +100,7 @@ model Poll {
 
   @@index([creatorId])
   @@index([expiresAt])
+  @@index([isPublic, isPublished])
 }
 
 model Question {
@@ -133,6 +135,7 @@ model Submission {
   poll            Poll      @relation(fields: [pollId], references: [id], onDelete: Cascade)
   respondentUserId String?
   respondentUser  User?     @relation("RespondentSubmissions", fields: [respondentUserId], references: [id], onDelete: SetNull)
+  fingerprintId   String?
   isAnonymous     Boolean
   submittedAt     DateTime  @default(now())
   answers         Answer[]

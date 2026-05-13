@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 
 import BackgroundElements from "../components/BackgroundElements";
 import Header from "../components/Header";
@@ -8,7 +8,9 @@ import { signInWithEmail, signInWithGoogle, verifyEmailCode } from "../lib/auth-
 
 const SignInPage = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { refreshSession } = useAuth();
+  const redirectTo = searchParams.get("redirect") ?? "/dashboard";
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,7 +47,7 @@ const SignInPage = () => {
     try {
       await verifyEmailCode(email, code);
       await refreshSession();
-      navigate("/");
+      navigate(redirectTo, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to verify code";
       setErrorMessage(message);

@@ -7,7 +7,8 @@ export const publicSubmissionSchema = z.object({
       optionId: z.string().min(1)
     })
   ),
-  submitAsAnonymous: z.boolean().optional().default(true)
+  submitAsAnonymous: z.boolean().optional().default(true),
+  fingerprintId: z.string().max(128).optional()
 });
 
 export type PublicSubmissionInput = z.infer<typeof publicSubmissionSchema>;

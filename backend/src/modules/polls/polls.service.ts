@@ -38,8 +38,9 @@ const mapPollSummary = (poll: PollWithRelations) => ({
   title: poll.title,
   description: poll.description,
   responseMode: poll.responseMode,
-  expiresAt: poll.expiresAt.toISOString(),
   isPublished: poll.isPublished,
+  isPublic: poll.isPublic,
+  expiresAt: poll.expiresAt.toISOString(),
   createdAt: poll.createdAt.toISOString(),
   updatedAt: poll.updatedAt.toISOString(),
   totalQuestions: poll.questions.length,
@@ -101,6 +102,7 @@ export const createPoll = async (creatorId: string, input: CreatePollInput) => {
       title: input.title,
       ...(input.description !== undefined ? { description: input.description } : {}),
       responseMode: input.responseMode as ResponseMode,
+      isPublic: input.isPublic ?? true,
       expiresAt: new Date(input.expiresAt),
       slug: createSlug(input.title),
       questions: buildQuestionsCreate(input.questions)
@@ -150,6 +152,7 @@ export const updateCreatorPoll = async (
         ...(input.responseMode !== undefined
           ? { responseMode: input.responseMode as ResponseMode }
           : {}),
+        ...(input.isPublic !== undefined ? { isPublic: input.isPublic } : {}),
         ...(input.expiresAt !== undefined ? { expiresAt: new Date(input.expiresAt) } : {}),
         ...(input.questions ? { questions: buildQuestionsCreate(input.questions) } : {})
       },
@@ -198,6 +201,9 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
         include: {
           option: true
         }
+      },
+      respondentUser: {
+        select: { id: true, name: true, email: true }
       }
     }
   });
@@ -240,6 +246,17 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
   const totalRequiredAnswered = requiredQuestions.reduce((sum, question) => sum + question.answeredCount, 0);
   const requiredAnswerTarget = requiredQuestions.length * totalResponses;
 
+  // Build voter list for authenticated polls
+  const voters =
+    poll.responseMode === "AUTHENTICATED"
+      ? submissions
+          .filter((s) => s.respondentUser)
+          .map((s) => ({
+            name: s.respondentUser!.name ?? s.respondentUser!.email ?? "User",
+            submittedAt: s.submittedAt.toISOString()
+          }))
+      : undefined;
+
   return {
     poll: {
       id: poll.id,
@@ -247,6 +264,7 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
       title: poll.title,
       responseMode: poll.responseMode,
       isPublished: poll.isPublished,
+      isPublic: poll.isPublic,
       expiresAt: poll.expiresAt.toISOString(),
       state: pollState(poll)
     },
@@ -259,6 +277,7 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
           ? 100
           : Number(((totalRequiredAnswered / requiredAnswerTarget) * 100).toFixed(2))
     },
+    voters,
     questions: questionSummaries,
     updatedAt: new Date().toISOString()
   };
