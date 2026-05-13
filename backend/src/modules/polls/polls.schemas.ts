@@ -14,6 +14,7 @@ export const createPollSchema = z.object({
   responseMode: z.enum(["ANONYMOUS", "AUTHENTICATED"]),
   isPublic: z.boolean().optional().default(true),
   expiresAt: z.iso.datetime(),
+  maxResponses: z.number().int().positive().optional(),
   questions: z.array(questionSchema).min(1).max(30)
 });
 

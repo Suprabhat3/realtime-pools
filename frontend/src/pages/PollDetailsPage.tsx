@@ -115,7 +115,7 @@ const PollDetailsPage = () => {
   }
 
   const question = poll.questions[0];
-  const isPollExpired = poll.isExpired || poll.isPublished;
+  const isPollExpired = !!poll.isExpired; // true when time-expired OR vote cap reached
   const requiresAuth = poll.responseMode === "AUTHENTICATED";
 
   const timeLeft = (() => {

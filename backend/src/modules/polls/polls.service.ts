@@ -32,20 +32,42 @@ const createSlug = (title: string) => {
   return `${base}-${crypto.randomBytes(3).toString("hex")}`;
 };
 
-const mapPollSummary = (poll: PollWithRelations) => ({
-  id: poll.id,
-  slug: poll.slug,
-  title: poll.title,
-  description: poll.description,
-  responseMode: poll.responseMode,
-  isPublished: poll.isPublished,
-  isPublic: poll.isPublic,
-  expiresAt: poll.expiresAt.toISOString(),
-  createdAt: poll.createdAt.toISOString(),
-  updatedAt: poll.updatedAt.toISOString(),
-  totalQuestions: poll.questions.length,
-  totalResponses: poll._count.submissions
-});
+/**
+ * State machine (corrected):
+ *   "draft"  → isPublished = false  (not yet live)
+ *   "active" → isPublished = true   AND not time-expired AND votes < maxResponses
+ *   "closed" → isPublished = true   AND (time-expired OR votes >= maxResponses)
+ */
+const pollState = (
+  poll: { isPublished: boolean; expiresAt: Date; maxResponses: number | null },
+  totalResponses: number
+) => {
+  if (!poll.isPublished) return "draft";
+  const timeExpired = poll.expiresAt.getTime() < Date.now();
+  const voteLimitReached = poll.maxResponses !== null && totalResponses >= poll.maxResponses;
+  if (timeExpired || voteLimitReached) return "closed";
+  return "active";
+};
+
+const mapPollSummary = (poll: PollWithRelations) => {
+  const totalResponses = poll._count.submissions;
+  return {
+    id: poll.id,
+    slug: poll.slug,
+    title: poll.title,
+    description: poll.description,
+    responseMode: poll.responseMode,
+    isPublished: poll.isPublished,
+    isPublic: poll.isPublic,
+    maxResponses: poll.maxResponses,
+    expiresAt: poll.expiresAt.toISOString(),
+    createdAt: poll.createdAt.toISOString(),
+    updatedAt: poll.updatedAt.toISOString(),
+    totalQuestions: poll.questions.length,
+    totalResponses,
+    state: pollState(poll, totalResponses)
+  };
+};
 
 const mapPollDetails = (poll: PollWithRelations) => ({
   ...mapPollSummary(poll),
@@ -61,12 +83,6 @@ const mapPollDetails = (poll: PollWithRelations) => ({
     }))
   }))
 });
-
-const pollState = (poll: { isPublished: boolean; expiresAt: Date }) => {
-  if (poll.isPublished) return "published";
-  if (poll.expiresAt.getTime() < Date.now()) return "expired";
-  return "active";
-};
 
 const ensurePollOwned = async (pollId: string, creatorId: string) => {
   const poll = await prisma.poll.findUnique({
@@ -103,6 +119,8 @@ export const createPoll = async (creatorId: string, input: CreatePollInput) => {
       ...(input.description !== undefined ? { description: input.description } : {}),
       responseMode: input.responseMode as ResponseMode,
       isPublic: input.isPublic ?? true,
+      isPublished: true, // Creating via the form = immediately live
+      maxResponses: input.maxResponses ?? null,
       expiresAt: new Date(input.expiresAt),
       slug: createSlug(input.title),
       questions: buildQuestionsCreate(input.questions)
@@ -125,10 +143,7 @@ export const listCreatorPolls = async (creatorId: string) => {
 
 export const getCreatorPollById = async (pollId: string, creatorId: string) => {
   const poll = await ensurePollOwned(pollId, creatorId);
-  return {
-    ...mapPollDetails(poll),
-    state: pollState(poll)
-  };
+  return mapPollDetails(poll);
 };
 
 export const updateCreatorPoll = async (
@@ -153,6 +168,7 @@ export const updateCreatorPoll = async (
           ? { responseMode: input.responseMode as ResponseMode }
           : {}),
         ...(input.isPublic !== undefined ? { isPublic: input.isPublic } : {}),
+        ...(input.maxResponses !== undefined ? { maxResponses: input.maxResponses } : {}),
         ...(input.expiresAt !== undefined ? { expiresAt: new Date(input.expiresAt) } : {}),
         ...(input.questions ? { questions: buildQuestionsCreate(input.questions) } : {})
       },
@@ -160,23 +176,36 @@ export const updateCreatorPoll = async (
     });
   });
 
+  return mapPollDetails(updated);
+};
+
+/**
+ * "Publish" in the context of the dashboard = close the poll and lock results.
+ * We use isPublished=false to represent "closed/locked" for the creator action,
+ * which is the inverse: creator explicitly closes → set isPublished=false.
+ *
+ * Actually: let's keep isPublished=true=live, and closing = setting expiresAt to now.
+ * This avoids further confusion. Closing a poll early just backdates its expiresAt.
+ */
+export const closePoll = async (pollId: string, creatorId: string) => {
+  const poll = await ensurePollOwned(pollId, creatorId);
+
+  const updated = await prisma.poll.update({
+    where: { id: pollId },
+    data: { expiresAt: new Date() } // expire immediately
+  });
+
   return {
-    ...mapPollDetails(updated),
-    state: pollState(updated)
+    id: updated.id,
+    slug: updated.slug,
+    state: "closed",
+    closedAt: updated.updatedAt.toISOString()
   };
 };
 
+/** Legacy endpoint — kept for backward compat but now it activates a draft. */
 export const publishPoll = async (pollId: string, creatorId: string) => {
-  const poll = await ensurePollOwned(pollId, creatorId);
-
-  if (poll.isPublished) {
-    return {
-      id: poll.id,
-      slug: poll.slug,
-      isPublished: true,
-      publishedAt: poll.updatedAt.toISOString()
-    };
-  }
+  await ensurePollOwned(pollId, creatorId);
 
   const updated = await prisma.poll.update({
     where: { id: pollId },
@@ -197,20 +226,14 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
   const submissions = await prisma.submission.findMany({
     where: { pollId },
     include: {
-      answers: {
-        include: {
-          option: true
-        }
-      },
-      respondentUser: {
-        select: { id: true, name: true, email: true }
-      }
+      answers: { include: { option: true } },
+      respondentUser: { select: { id: true, name: true, email: true } }
     }
   });
 
   const totalResponses = submissions.length;
-  const authenticatedResponses = submissions.filter((submission) => !submission.isAnonymous).length;
-  const anonymousResponses = submissions.filter((submission) => submission.isAnonymous).length;
+  const authenticatedResponses = submissions.filter((s) => !s.isAnonymous).length;
+  const anonymousResponses = submissions.filter((s) => s.isAnonymous).length;
 
   const questionSummaries = poll.questions.map((question) => {
     const optionCounts = new Map<string, number>();
@@ -242,11 +265,6 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
     };
   });
 
-  const requiredQuestions = questionSummaries.filter((question) => question.isRequired);
-  const totalRequiredAnswered = requiredQuestions.reduce((sum, question) => sum + question.answeredCount, 0);
-  const requiredAnswerTarget = requiredQuestions.length * totalResponses;
-
-  // Build voter list for authenticated polls
   const voters =
     poll.responseMode === "AUTHENTICATED"
       ? submissions
@@ -265,17 +283,14 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
       responseMode: poll.responseMode,
       isPublished: poll.isPublished,
       isPublic: poll.isPublic,
+      maxResponses: poll.maxResponses,
       expiresAt: poll.expiresAt.toISOString(),
-      state: pollState(poll)
+      state: pollState(poll, totalResponses)
     },
     overview: {
       totalResponses,
       authenticatedResponses,
-      anonymousResponses,
-      participationRate:
-        requiredAnswerTarget === 0
-          ? 100
-          : Number(((totalRequiredAnswered / requiredAnswerTarget) * 100).toFixed(2))
+      anonymousResponses
     },
     voters,
     questions: questionSummaries,

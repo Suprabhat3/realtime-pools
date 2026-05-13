@@ -35,6 +35,7 @@ export type CreatePollInput = {
   responseMode: "ANONYMOUS" | "AUTHENTICATED";
   isPublic: boolean;
   expiresAt: string;
+  maxResponses?: number;
   questions: CreatePollQuestionInput[];
 };
 
@@ -46,9 +47,11 @@ export type PollSummary = {
   responseMode: string;
   isPublished: boolean;
   isPublic: boolean;
+  maxResponses?: number | null;
   expiresAt: string;
   createdAt: string;
   totalResponses: number;
+  state: "draft" | "active" | "closed";
 };
 
 export type PublicPollCard = {
@@ -57,6 +60,7 @@ export type PublicPollCard = {
   title: string;
   description?: string;
   responseMode: string;
+  maxResponses?: number | null;
   expiresAt: string;
   createdAt: string;
   totalVotes: number;
@@ -82,6 +86,8 @@ export const updatePoll = (pollId: string, data: Partial<CreatePollInput>) =>
   request<PollResponse>(`/api/polls/${pollId}`, { method: "PATCH", body: JSON.stringify(data) });
 export const publishPoll = (pollId: string) =>
   request<PollResponse>(`/api/polls/${pollId}/publish`, { method: "POST" });
+export const closePoll = (pollId: string) =>
+  request<PollResponse>(`/api/polls/${pollId}/close`, { method: "POST" });
 export const getPollAnalytics = (pollId: string) =>
   request<any>(`/api/polls/${pollId}/analytics`);
 

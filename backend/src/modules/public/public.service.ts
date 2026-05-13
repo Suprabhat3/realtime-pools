@@ -12,13 +12,34 @@ type PublicPollRecord = Prisma.PollGetPayload<{
       include: { options: { orderBy: { orderIndex: "asc" } } };
     };
     creator: { select: { name: true; image: true } };
+    _count: { select: { submissions: true } };
   };
 }>;
 
 const nowIso = () => new Date().toISOString();
 
+/**
+ * A poll is "open" (accepting votes) when:
+ *   - isPublished = true  (creator made it live)
+ *   - expiresAt > now     (not time-expired)
+ *   - totalSubmissions < maxResponses  (vote cap not reached, if set)
+ */
+const isPollOpen = (
+  poll: { isPublished: boolean; expiresAt: Date; maxResponses: number | null },
+  totalResponses: number
+) => {
+  if (!poll.isPublished) return false;
+  if (poll.expiresAt.getTime() < Date.now()) return false;
+  if (poll.maxResponses !== null && totalResponses >= poll.maxResponses) return false;
+  return true;
+};
+
 const mapPublicPoll = (poll: PublicPollRecord) => {
-  const expired = poll.expiresAt.getTime() < Date.now();
+  const totalResponses = poll._count.submissions;
+  const open = isPollOpen(poll, totalResponses);
+  const timeExpired = poll.expiresAt.getTime() < Date.now();
+  const voteLimitReached =
+    poll.maxResponses !== null && totalResponses >= poll.maxResponses;
 
   return {
     id: poll.id,
@@ -28,10 +49,11 @@ const mapPublicPoll = (poll: PublicPollRecord) => {
     responseMode: poll.responseMode,
     isPublished: poll.isPublished,
     isPublic: poll.isPublic,
+    maxResponses: poll.maxResponses,
     expiresAt: poll.expiresAt.toISOString(),
     createdAt: poll.createdAt.toISOString(),
-    isExpired: expired,
-    state: poll.isPublished ? "published" : expired ? "expired" : "active",
+    isExpired: timeExpired || voteLimitReached,
+    state: !poll.isPublished ? "draft" : open ? "active" : "closed",
     creator: {
       name: poll.creator.name,
       image: poll.creator.image
@@ -54,34 +76,25 @@ const getPollBySlug = async (slug: string) => {
     include: {
       questions: {
         orderBy: { orderIndex: "asc" },
-        include: {
-          options: {
-            orderBy: { orderIndex: "asc" }
-          }
-        }
+        include: { options: { orderBy: { orderIndex: "asc" } } }
       },
-      creator: {
-        select: { name: true, image: true }
-      }
+      creator: { select: { name: true, image: true } },
+      _count: { select: { submissions: true } }
     }
   });
 
-  if (!poll) {
-    throw new HttpError(404, "Poll not found");
-  }
-
+  if (!poll) throw new HttpError(404, "Poll not found");
   return poll;
 };
 
 export const listPublicPolls = async (category?: string) => {
-  const where: Prisma.PollWhereInput = {
-    isPublic: true,
-    isPublished: false, // still accepting votes (not closed)
-    expiresAt: { gt: new Date() } // not expired
-  };
-
+  // Fetch isPublic + isPublished (live) polls that haven't time-expired
   const polls = await prisma.poll.findMany({
-    where,
+    where: {
+      isPublic: true,
+      isPublished: true,        // must be live (not a draft)
+      expiresAt: { gt: new Date() } // not time-expired
+    },
     orderBy: { createdAt: "desc" },
     take: 50,
     include: {
@@ -96,8 +109,12 @@ export const listPublicPolls = async (category?: string) => {
 
   return polls
     .filter((poll) => {
+      // Filter out polls that hit their vote cap
+      if (poll.maxResponses !== null && poll._count.submissions >= poll.maxResponses) {
+        return false;
+      }
+      // Category filter
       if (!category || category === "All Topics") return true;
-      // Category is encoded in description as "Category: <name>"
       return poll.description?.includes(`Category: ${category}`);
     })
     .map((poll) => ({
@@ -106,6 +123,7 @@ export const listPublicPolls = async (category?: string) => {
       title: poll.title,
       description: poll.description,
       responseMode: poll.responseMode,
+      maxResponses: poll.maxResponses,
       expiresAt: poll.expiresAt.toISOString(),
       createdAt: poll.createdAt.toISOString(),
       totalVotes: poll._count.submissions,
@@ -131,19 +149,27 @@ export const submitPublicResponse = async (
   user?: AuthUser
 ) => {
   const poll = await getPollBySlug(slug);
+  const totalResponses = poll._count.submissions;
+
+  // --- Closed checks ---
+  if (!poll.isPublished) {
+    throw new HttpError(404, "Poll not found");
+  }
 
   if (poll.expiresAt.getTime() < Date.now()) {
-    throw new HttpError(410, "Poll link has expired");
+    throw new HttpError(410, "This poll has expired");
   }
 
-  if (poll.isPublished) {
-    throw new HttpError(400, "Poll is already closed for responses");
+  if (poll.maxResponses !== null && totalResponses >= poll.maxResponses) {
+    throw new HttpError(410, "This poll has reached its maximum number of votes");
   }
 
+  // --- Auth check ---
   if (poll.responseMode === "AUTHENTICATED" && !user) {
     throw new HttpError(401, "You must be signed in to vote on this poll");
   }
 
+  // --- Validate answers ---
   const answerMap = new Map<string, string>();
   for (const entry of payload.answers) {
     answerMap.set(entry.questionId, entry.optionId);
@@ -151,19 +177,12 @@ export const submitPublicResponse = async (
 
   for (const question of poll.questions) {
     const selectedOptionId = answerMap.get(question.id);
-
     if (question.isRequired && !selectedOptionId) {
       throw new HttpError(400, `Required question missing answer: ${question.text}`);
     }
-
-    if (!selectedOptionId) {
-      continue;
-    }
-
-    const validOption = question.options.some((option) => option.id === selectedOptionId);
-    if (!validOption) {
-      throw new HttpError(400, "Invalid option selected");
-    }
+    if (!selectedOptionId) continue;
+    const validOption = question.options.some((o) => o.id === selectedOptionId);
+    if (!validOption) throw new HttpError(400, "Invalid option selected");
   }
 
   const isAnonymousSubmission =
@@ -175,31 +194,26 @@ export const submitPublicResponse = async (
     throw new HttpError(401, "You must be signed in to vote on this poll");
   }
 
-  // Dedup for authenticated users: DB unique constraint handles it
+  // Dedup for authenticated users
   if (respondentUserId) {
     const existing = await prisma.submission.findFirst({
       where: { pollId: poll.id, respondentUserId },
       select: { id: true }
     });
-    if (existing) {
-      throw new HttpError(409, "You have already voted on this poll");
-    }
+    if (existing) throw new HttpError(409, "You have already voted on this poll");
   }
 
-  // Dedup for anonymous users via fingerprintId
+  // Dedup for anonymous users via fingerprint
   if (isAnonymousSubmission && payload.fingerprintId) {
     const existing = await prisma.submission.findFirst({
       where: { pollId: poll.id, fingerprintId: payload.fingerprintId },
       select: { id: true }
     });
-    if (existing) {
-      throw new HttpError(409, "You have already voted on this poll");
-    }
+    if (existing) throw new HttpError(409, "You have already voted on this poll");
   }
 
   const submitted = await prisma.$transaction(async (tx) => {
     const answerCreates: Array<{ questionId: string; optionId: string }> = [];
-
     for (const question of poll.questions) {
       const optionId = answerMap.get(question.id);
       if (!optionId) continue;
@@ -216,9 +230,9 @@ export const submitPublicResponse = async (
       }
     });
 
-    const totalResponses = await tx.submission.count({ where: { pollId: poll.id } });
+    const newTotal = await tx.submission.count({ where: { pollId: poll.id } });
 
-    return { submissionId: submission.id, pollId: poll.id, totalResponses };
+    return { submissionId: submission.id, pollId: poll.id, totalResponses: newTotal };
   });
 
   return { ...submitted, submittedAt: nowIso() };
@@ -226,8 +240,8 @@ export const submitPublicResponse = async (
 
 export const getPublicPollResults = async (slug: string) => {
   const poll = await getPollBySlug(slug);
+  const totalResponses = poll._count.submissions;
 
-  // Results are always visible (caller controls when to show them in the UI)
   const submissions = await prisma.submission.findMany({
     where: { pollId: poll.id },
     include: {
@@ -236,17 +250,13 @@ export const getPublicPollResults = async (slug: string) => {
     }
   });
 
-  const totalResponses = submissions.length;
-
   const questionSummaries = poll.questions.map((question) => {
     const optionCounts = new Map<string, number>();
-    for (const option of question.options) {
-      optionCounts.set(option.id, 0);
-    }
+    for (const option of question.options) optionCounts.set(option.id, 0);
 
     let answeredCount = 0;
     for (const submission of submissions) {
-      const answer = submission.answers.find((entry) => entry.questionId === question.id);
+      const answer = submission.answers.find((e) => e.questionId === question.id);
       if (!answer) continue;
       answeredCount += 1;
       optionCounts.set(answer.optionId, (optionCounts.get(answer.optionId) ?? 0) + 1);
@@ -268,7 +278,6 @@ export const getPublicPollResults = async (slug: string) => {
     };
   });
 
-  // Return voter list for AUTHENTICATED polls
   const voters =
     poll.responseMode === "AUTHENTICATED"
       ? submissions
@@ -279,6 +288,8 @@ export const getPublicPollResults = async (slug: string) => {
           }))
       : undefined;
 
+  const open = isPollOpen(poll, totalResponses);
+
   return {
     poll: {
       id: poll.id,
@@ -286,9 +297,10 @@ export const getPublicPollResults = async (slug: string) => {
       title: poll.title,
       description: poll.description,
       responseMode: poll.responseMode,
+      maxResponses: poll.maxResponses,
       expiresAt: poll.expiresAt.toISOString(),
       isPublished: poll.isPublished,
-      publishedAt: poll.updatedAt.toISOString()
+      state: !poll.isPublished ? "draft" : open ? "active" : "closed"
     },
     overview: { totalResponses },
     voters,

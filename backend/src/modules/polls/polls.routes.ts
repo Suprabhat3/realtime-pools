@@ -4,6 +4,7 @@ import type { Router as ExpressRouter } from "express";
 import { requireAuth } from "../shared/require-auth";
 import { createPollSchema, updatePollSchema } from "./polls.schemas";
 import {
+  closePoll,
   createPoll,
   getCreatorPollById,
   getPollAnalytics,
@@ -70,6 +71,7 @@ pollsRouter.patch("/:pollId", requireAuth, async (req, res, next) => {
   }
 });
 
+// Legacy: activate a draft poll
 pollsRouter.post("/:pollId/publish", requireAuth, async (req, res, next) => {
   try {
     const pollId = getSingleParam(req.params.pollId);
@@ -79,6 +81,22 @@ pollsRouter.post("/:pollId/publish", requireAuth, async (req, res, next) => {
     }
 
     const result = await publishPoll(pollId, req.user!.id);
+    res.status(200).json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Close a poll early (sets expiresAt = now)
+pollsRouter.post("/:pollId/close", requireAuth, async (req, res, next) => {
+  try {
+    const pollId = getSingleParam(req.params.pollId);
+    if (!pollId) {
+      res.status(400).json({ error: { message: "Invalid poll id" } });
+      return;
+    }
+
+    const result = await closePoll(pollId, req.user!.id);
     res.status(200).json({ data: result });
   } catch (error) {
     next(error);
