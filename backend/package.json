@@ -4,7 +4,9 @@
   "description": "",
   "main": "dist/index.js",
   "scripts": {
-    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "dev": "ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
+    "kill:port": "npx kill-port 4000",
+    "dev:fresh": "npx kill-port 4000 && ts-node-dev --respawn --transpile-only --exit-child src/server.ts",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/server.js",
     "typecheck": "tsc --noEmit",

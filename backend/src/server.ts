@@ -30,6 +30,35 @@ io.on("connection", (socket) => {
   });
 });
 
-httpServer.listen(env.PORT, () => {
+const server = httpServer.listen(env.PORT, () => {
   console.log(`Server running on http://localhost:${env.PORT}`);
 });
+
+// ── Graceful shutdown ──────────────────────────────────────────────────────
+// On Windows, Ctrl+C in PowerShell kills the shell but orphans child Node
+// processes which keep holding the port. Catching SIGINT here and calling
+// server.close() + process.exit() ensures the TCP socket is released before
+// the process exits, so the port is immediately available on restart.
+
+const shutdown = (signal: string) => {
+  console.log(`\n[${signal}] Shutting down gracefully…`);
+
+  // Close all keep-alive connections immediately (Node 18.2+)
+  if (typeof (server as any).closeAllConnections === "function") {
+    (server as any).closeAllConnections();
+  }
+
+  server.close(() => {
+    console.log("HTTP server closed. Port released.");
+    process.exit(0);
+  });
+
+  // Force-exit after 3 s if something hangs
+  setTimeout(() => {
+    console.error("Forced exit after timeout.");
+    process.exit(1);
+  }, 3000).unref();
+};
+
+process.on("SIGINT", () => shutdown("SIGINT"));
+process.on("SIGTERM", () => shutdown("SIGTERM"));

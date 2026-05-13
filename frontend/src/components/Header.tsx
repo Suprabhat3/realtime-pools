@@ -21,10 +21,9 @@ const Header = () => {
 
   return (
     <header className="w-full flex justify-between items-center py-4 px-8 md:px-12 relative z-20 bg-white shadow-sm border-b border-gray-100">
-      <div className="flex items-center gap-8 lg:gap-16">
+      <div className="flex items-center gap-4 lg:gap-6 ml-12">
         <Link to="/" className="flex items-center">
-          <div className="h-6 w-6 rounded-full border-4 border-brand-crimson"></div>
-          <h3 className="text-xl font-bold text-gray-900 ml-2 tracking-tight">VibePoll</h3>
+          <img src="/zenpoll-logo.png" alt="Logo" className="h-10 w-14" />
         </Link>
 
         <nav className="hidden md:flex items-center gap-8 text-sm font-bold tracking-wide uppercase text-gray-600">
@@ -32,7 +31,9 @@ const Header = () => {
             to="/explorer"
             className={({ isActive }) =>
               `hover:text-brand-crimson transition-colors pb-1 border-b-2 ${
-                isActive ? "text-brand-crimson border-brand-crimson" : "border-transparent"
+                isActive
+                  ? "text-brand-crimson border-brand-crimson"
+                  : "border-transparent"
               }`
             }
           >
@@ -42,7 +43,9 @@ const Header = () => {
             to="/create"
             className={({ isActive }) =>
               `hover:text-brand-crimson transition-colors pb-1 border-b-2 ${
-                isActive ? "text-brand-crimson border-brand-crimson" : "border-transparent"
+                isActive
+                  ? "text-brand-crimson border-brand-crimson"
+                  : "border-transparent"
               }`
             }
           >
@@ -53,7 +56,9 @@ const Header = () => {
               to="/dashboard"
               className={({ isActive }) =>
                 `hover:text-brand-crimson transition-colors pb-1 border-b-2 ${
-                  isActive ? "text-brand-crimson border-brand-crimson" : "border-transparent"
+                  isActive
+                    ? "text-brand-crimson border-brand-crimson"
+                    : "border-transparent"
                 }`
               }
             >
@@ -64,7 +69,10 @@ const Header = () => {
       </div>
 
       <div className="flex items-center gap-6">
-        <form onSubmit={handleSearch} className="hidden lg:flex items-center border-b border-gray-300 pb-1">
+        <form
+          onSubmit={handleSearch}
+          className="hidden lg:flex items-center border-b border-gray-300 pb-1"
+        >
           <svg
             xmlns="http://www.w3.org/2000/svg"
             className="h-4 w-4 text-gray-400 mr-2"
@@ -72,7 +80,12 @@ const Header = () => {
             viewBox="0 0 24 24"
             stroke="currentColor"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
+            />
           </svg>
           <input
             type="text"
@@ -111,7 +124,10 @@ const Header = () => {
             </>
           ) : (
             <>
-              <Link to="/signin" className="text-gray-700 hover:text-gray-900 transition-colors">
+              <Link
+                to="/signin"
+                className="text-gray-700 hover:text-gray-900 transition-colors"
+              >
                 Login
               </Link>
               <Link
