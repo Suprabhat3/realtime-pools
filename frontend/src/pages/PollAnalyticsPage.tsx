@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link, useParams } from "react-router-dom";
-import { getPollAnalytics } from "../lib/polls-api";
+import { getPollAnalytics, announcePollResults } from "../lib/polls-api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -44,6 +44,7 @@ interface Analytics {
     title: string;
     responseMode: string;
     state: string;
+    isAnnounced?: boolean;
   };
   overview: {
     totalResponses: number;
@@ -241,6 +242,8 @@ const PollAnalyticsPage = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const [announcing, setAnnouncing] = useState(false);
+
   useEffect(() => {
     if (!pollId) return;
     getPollAnalytics(pollId)
@@ -248,6 +251,24 @@ const PollAnalyticsPage = () => {
       .catch((err) => setError(err.message || "Failed to load analytics."))
       .finally(() => setLoading(false));
   }, [pollId]);
+
+  const handleAnnounce = async () => {
+    if (!analytics) return;
+    if (confirm("Are you sure you want to announce the results? This will notify voters via email and make the demographics public.")) {
+      setAnnouncing(true);
+      try {
+        await announcePollResults(analytics.poll.id);
+        setAnalytics({
+          ...analytics,
+          poll: { ...analytics.poll, isAnnounced: true }
+        });
+      } catch (err: any) {
+        alert(err.message || "Failed to announce poll results.");
+      } finally {
+        setAnnouncing(false);
+      }
+    }
+  };
 
   if (loading) {
     return (
@@ -308,7 +329,7 @@ const PollAnalyticsPage = () => {
         </div>
 
         {/* Header */}
-        <div className="flex flex-col gap-2 border-b border-brand-crimson/20 pb-6">
+        <div className="flex flex-col gap-2 border-b border-brand-crimson/20 pb-6 relative">
           <div className="flex items-center gap-3">
             <span className={`text-xs font-bold px-2 py-0.5 rounded tracking-wide ${
               analytics.poll.state === "active"
@@ -320,13 +341,31 @@ const PollAnalyticsPage = () => {
             <span className="text-xs font-bold px-2 py-0.5 rounded bg-gray-100 text-gray-500 tracking-wide">
               {analytics.poll.responseMode === "AUTHENTICATED" ? "🔐 Auth required" : "👤 Open"}
             </span>
+            {analytics.poll.isAnnounced && (
+              <span className="text-xs font-bold px-2 py-0.5 rounded bg-green-100 text-green-700 tracking-wide">
+                📣 ANNOUNCED
+              </span>
+            )}
           </div>
-          <h1 className="text-3xl font-bold tracking-tight text-gray-900 leading-tight">
+          <h1 className="text-3xl font-bold tracking-tight text-gray-900 leading-tight pr-40">
             {analytics.poll.title}
           </h1>
           <p className="text-sm text-gray-500">
             Creator-only analytics · Last updated {new Date(analytics.updatedAt).toLocaleTimeString()}
           </p>
+
+          {/* Announce button */}
+          {analytics.poll.state === "closed" && !analytics.poll.isAnnounced && (
+            <div className="absolute right-0 top-0 sm:top-2 mt-2">
+              <button
+                onClick={handleAnnounce}
+                disabled={announcing}
+                className="bg-brand-crimson hover:bg-brand-crimson-hover text-white px-5 py-2.5 rounded-lg text-xs font-bold tracking-widest uppercase shadow-sm transition-colors disabled:opacity-50"
+              >
+                {announcing ? "ANNOUNCING..." : "ANNOUNCE RESULTS"}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Overview stats */}

@@ -51,6 +51,7 @@ export type PollSummary = {
   expiresAt: string;
   createdAt: string;
   totalResponses: number;
+  isAnnounced?: boolean;
   state: "draft" | "active" | "closed";
 };
 
@@ -64,6 +65,7 @@ export type PublicPollCard = {
   expiresAt: string;
   createdAt: string;
   totalVotes: number;
+  isAnnounced?: boolean;
   creator: { name: string | null; image: string | null };
   firstQuestion: {
     id: string;
@@ -90,6 +92,8 @@ export const closePoll = (pollId: string) =>
   request<PollResponse>(`/api/polls/${pollId}/close`, { method: "POST" });
 export const getPollAnalytics = (pollId: string) =>
   request<any>(`/api/polls/${pollId}/analytics`);
+export const announcePollResults = (pollId: string) =>
+  request<PollResponse>(`/api/polls/${pollId}/announce`, { method: "POST" });
 
 // ─── Public APIs ─────────────────────────────────────────────────────────────
 

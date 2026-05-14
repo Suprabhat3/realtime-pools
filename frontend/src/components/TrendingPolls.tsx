@@ -29,11 +29,22 @@ const TrendingPollCard = ({ poll, rank }: { poll: PublicPollCard; rank: number }
             <span className="text-sm font-extrabold text-brand-crimson">#{rank}</span>
           </div>
           <div className="flex flex-col">
-            <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-brand-crimson uppercase">
-              <div className="w-1.5 h-1.5 rounded-full bg-brand-crimson animate-pulse" />
-              Live
+            <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider uppercase">
+              {poll.isAnnounced ? (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+                  <span className="text-green-600">Results Announced</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-1.5 h-1.5 rounded-full bg-brand-crimson animate-pulse" />
+                  <span className="text-brand-crimson">Live</span>
+                </>
+              )}
             </div>
-            <span className="text-xs font-medium text-gray-400">{timeLeft(poll.expiresAt)}</span>
+            <span className="text-xs font-medium text-gray-400">
+              {poll.isAnnounced ? "Closed" : timeLeft(poll.expiresAt)}
+            </span>
           </div>
         </div>
       </div>

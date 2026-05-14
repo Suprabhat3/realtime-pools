@@ -21,6 +21,34 @@ const resolveAvatar = (name: string | null, image: string | null, isAnonymous: b
   return `https://api.dicebear.com/7.x/shapes/svg?seed=anon&backgroundColor=e2e8f0`;
 };
 
+// ─── Demographic Helpers ──────────────────────────────────────────────────────
+
+const genderLabel: Record<string, { color: string; text: string }> = {
+  MALE:             { color: "text-blue-500",   text: "Male" },
+  FEMALE:           { color: "text-pink-500",   text: "Female" },
+  NON_BINARY:       { color: "text-purple-500", text: "Non-binary" },
+  PREFER_NOT_TO_SAY:{ color: "text-gray-400",   text: "Prefer not to say" }
+};
+
+const GENDER_COLORS = ["text-blue-500", "text-pink-500", "text-purple-500", "text-gray-400"];
+const AGE_COLORS    = ["text-teal-500", "text-cyan-500", "text-sky-500", "text-indigo-500", "text-violet-500", "text-fuchsia-500"];
+
+const DemoBar = ({ label, count, percentage, color }: { label: string; count: number; percentage: number; color: string }) => (
+  <div className="flex flex-col gap-1">
+    <div className="flex justify-between items-center text-xs">
+      <span className="text-gray-600 font-medium truncate max-w-[120px]">{label}</span>
+      <span className={`font-bold tabular-nums ${color}`}>{percentage}%</span>
+    </div>
+    <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+      <div
+        className={`h-full rounded-full transition-all duration-700 ${color.replace("text-", "bg-")}`}
+        style={{ width: `${percentage}%` }}
+      />
+    </div>
+    <span className="text-[10px] text-gray-400 tabular-nums">{count} voter{count !== 1 ? "s" : ""}</span>
+  </div>
+);
+
 // ─── Sub-component: Voter Avatar Stack ───────────────────────────────────────
 
 interface VoterPreview {
@@ -92,7 +120,7 @@ const AvatarStack = ({
 const PollDetailsPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
-  const { isAuthenticated, user, isLoading: authLoading } = useAuth();
+  const { isAuthenticated, isLoading: authLoading } = useAuth();
 
   const [poll, setPoll] = useState<any>(null);
   const [results, setResults] = useState<any>(null);
@@ -419,7 +447,20 @@ const PollDetailsPage = () => {
               <h2 className="text-2xl font-extrabold text-gray-900 tracking-tight">Final Results</h2>
             </div>
 
-            {isPollExpired && !hasVoted && (
+            {poll?.isAnnounced && !results?.overview?.hasSufficientDemoData && (
+              <div className="flex items-start gap-3 p-4 mb-2 bg-amber-50 border border-amber-100 rounded-xl">
+                <span className="text-xl mt-0.5">⚠️</span>
+                <div>
+                  <p className="text-sm font-bold text-amber-800">Demographic data hidden</p>
+                  <p className="text-xs text-amber-700 mt-0.5">
+                    At least 3 authenticated voters are needed to display demographic breakdowns. 
+                    Currently not enough data to protect voter privacy.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {(isPollExpired || poll?.isAnnounced) && (
               <div className="flex flex-col gap-4">
                 {results.questions[0].options.map((opt: any) => (
                   <div key={opt.optionId} className="flex flex-col gap-3 p-6 bg-white border border-gray-100 rounded-2xl shadow-sm hover:shadow-md transition-shadow">
@@ -441,6 +482,49 @@ const PollDetailsPage = () => {
                         isAnonymousMode={isAnonymousPoll}
                       />
                     </div>
+                    {/* Demographics */}
+                    {opt.demographics && (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 pt-4 mt-2 border-t border-gray-100">
+                        {opt.demographics.gender?.length > 0 && (
+                          <div className="flex flex-col gap-3">
+                            <p className="text-xs font-bold tracking-widest uppercase text-gray-400">By Gender</p>
+                            <div className="flex flex-col gap-3">
+                              {opt.demographics.gender.map((slice: any, idx: number) => {
+                                const meta = genderLabel[slice.label];
+                                return (
+                                  <DemoBar
+                                    key={slice.label}
+                                    label={meta?.text ?? slice.label}
+                                    count={slice.count}
+                                    percentage={slice.percentage}
+                                    color={GENDER_COLORS[idx % GENDER_COLORS.length]}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                        {opt.demographics.ageGroups?.length > 0 && (
+                          <div className="flex flex-col gap-3">
+                            <p className="text-xs font-bold tracking-widest uppercase text-gray-400">By Age Group</p>
+                            <div className="flex flex-col gap-3">
+                              {opt.demographics.ageGroups.map((slice: any, idx: number) => (
+                                <DemoBar
+                                  key={slice.label}
+                                  label={slice.label}
+                                  count={slice.count}
+                                  percentage={slice.percentage}
+                                  color={AGE_COLORS[idx % AGE_COLORS.length]}
+                                />
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                        {opt.demographics.gender?.length === 0 && opt.demographics.ageGroups?.length === 0 && (
+                          <p className="text-xs text-gray-400 col-span-2">No demographic data available for this option.</p>
+                        )}
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>

@@ -10,7 +10,8 @@ import {
   getPollAnalytics,
   listCreatorPolls,
   publishPoll,
-  updateCreatorPoll
+  updateCreatorPoll,
+  announcePollResults
 } from "./polls.service";
 
 export const pollsRouter: ExpressRouter = Router();
@@ -97,6 +98,22 @@ pollsRouter.post("/:pollId/close", requireAuth, async (req, res, next) => {
     }
 
     const result = await closePoll(pollId, req.user!.id);
+    res.status(200).json({ data: result });
+  } catch (error) {
+    next(error);
+  }
+});
+
+// Announce poll results
+pollsRouter.post("/:pollId/announce", requireAuth, async (req, res, next) => {
+  try {
+    const pollId = getSingleParam(req.params.pollId);
+    if (!pollId) {
+      res.status(400).json({ error: { message: "Invalid poll id" } });
+      return;
+    }
+
+    const result = await announcePollResults(pollId, req.user!.id);
     res.status(200).json({ data: result });
   } catch (error) {
     next(error);

@@ -25,10 +25,11 @@ const nowIso = () => new Date().toISOString();
  *   - totalSubmissions < maxResponses  (vote cap not reached, if set)
  */
 const isPollOpen = (
-  poll: { isPublished: boolean; expiresAt: Date; maxResponses: number | null },
+  poll: { isPublished: boolean; isAnnounced: boolean; expiresAt: Date; maxResponses: number | null },
   totalResponses: number
 ) => {
   if (!poll.isPublished) return false;
+  if (poll.isAnnounced) return false;
   if (poll.expiresAt.getTime() < Date.now()) return false;
   if (poll.maxResponses !== null && totalResponses >= poll.maxResponses) return false;
   return true;
@@ -53,6 +54,7 @@ const mapPublicPoll = (poll: PublicPollRecord) => {
     expiresAt: poll.expiresAt.toISOString(),
     createdAt: poll.createdAt.toISOString(),
     isExpired: timeExpired || voteLimitReached,
+    isAnnounced: poll.isAnnounced,
     state: !poll.isPublished ? "draft" : open ? "active" : "closed",
     creator: {
       name: poll.creator.name,
@@ -88,12 +90,15 @@ const getPollBySlug = async (slug: string) => {
 };
 
 export const listPublicPolls = async (category?: string) => {
-  // Fetch isPublic + isPublished (live) polls that haven't time-expired
+  // Fetch isPublic + isPublished (live) polls that are either active or announced
   const polls = await prisma.poll.findMany({
     where: {
       isPublic: true,
       isPublished: true,        // must be live (not a draft)
-      expiresAt: { gt: new Date() } // not time-expired
+      OR: [
+        { expiresAt: { gt: new Date() } }, // not time-expired
+        { isAnnounced: true }
+      ]
     },
     orderBy: { createdAt: "desc" },
     take: 50,
@@ -109,8 +114,8 @@ export const listPublicPolls = async (category?: string) => {
 
   return polls
     .filter((poll) => {
-      // Filter out polls that hit their vote cap
-      if (poll.maxResponses !== null && poll._count.submissions >= poll.maxResponses) {
+      // Filter out polls that hit their vote cap unless they are announced
+      if (!poll.isAnnounced && poll.maxResponses !== null && poll._count.submissions >= poll.maxResponses) {
         return false;
       }
       // Category filter
@@ -127,6 +132,7 @@ export const listPublicPolls = async (category?: string) => {
       expiresAt: poll.expiresAt.toISOString(),
       createdAt: poll.createdAt.toISOString(),
       totalVotes: poll._count.submissions,
+      isAnnounced: poll.isAnnounced,
       creator: { name: poll.creator.name, image: poll.creator.image },
       firstQuestion: poll.questions[0]
         ? {
@@ -245,18 +251,42 @@ export const getPublicPollResults = async (slug: string) => {
     where: { pollId: poll.id },
     include: {
       answers: true,
-      respondentUser: { select: { id: true, name: true, email: true, image: true } }
+      respondentUser: { select: { id: true, name: true, email: true, image: true, gender: true, birthday: true } }
     }
   });
 
+  const authenticatedResponses = submissions.filter((s) => !s.isAnonymous).length;
+  const hasSufficientDemoData = authenticatedResponses >= 3; // DEMOGRAPHICS_MIN_VOTERS
+  const includeDemographics = poll.isAnnounced && hasSufficientDemoData;
+
+  const ageFromBirthday = (birthday: Date): number => {
+    const now = new Date();
+    let age = now.getFullYear() - birthday.getFullYear();
+    const m = now.getMonth() - birthday.getMonth();
+    if (m < 0 || (m === 0 && now.getDate() < birthday.getDate())) age--;
+    return age;
+  };
+
+  const ageGroup = (age: number): string => {
+    if (age < 18) return "Under 18";
+    if (age <= 24) return "18–24";
+    if (age <= 34) return "25–34";
+    if (age <= 44) return "35–44";
+    if (age <= 54) return "45–54";
+    return "55+";
+  };
+
   const questionSummaries = poll.questions.map((question) => {
     const optionCounts = new Map<string, number>();
-    // Map of optionId → list of voter previews (capped at 8 for avatar stack)
     const optionVoterPreviews = new Map<string, { name: string | null; image: string | null; isAnonymous: boolean }[]>();
+    const optionGenderMap = new Map<string, Map<string, number>>();
+    const optionAgeGroupMap = new Map<string, Map<string, number>>();
 
     for (const option of question.options) {
       optionCounts.set(option.id, 0);
       optionVoterPreviews.set(option.id, []);
+      optionGenderMap.set(option.id, new Map());
+      optionAgeGroupMap.set(option.id, new Map());
     }
 
     let answeredCount = 0;
@@ -264,10 +294,11 @@ export const getPublicPollResults = async (slug: string) => {
       const answer = submission.answers.find((e) => e.questionId === question.id);
       if (!answer) continue;
       answeredCount += 1;
-      optionCounts.set(answer.optionId, (optionCounts.get(answer.optionId) ?? 0) + 1);
+      const oid = answer.optionId;
+      optionCounts.set(oid, (optionCounts.get(oid) ?? 0) + 1);
 
-      // Accumulate voter previews (cap at 8 per option for avatar stack display)
-      const previews = optionVoterPreviews.get(answer.optionId) ?? [];
+      // Accumulate voter previews
+      const previews = optionVoterPreviews.get(oid) ?? [];
       if (previews.length < 8) {
         previews.push({
           name: submission.isAnonymous
@@ -276,25 +307,56 @@ export const getPublicPollResults = async (slug: string) => {
           image: submission.isAnonymous ? null : (submission.respondentUser?.image ?? null),
           isAnonymous: submission.isAnonymous
         });
-        optionVoterPreviews.set(answer.optionId, previews);
+        optionVoterPreviews.set(oid, previews);
+      }
+
+      // Tally demographics if needed
+      if (includeDemographics && !submission.isAnonymous && submission.respondentUser) {
+        if (submission.respondentUser.gender) {
+          const gMap = optionGenderMap.get(oid)!;
+          const gKey = submission.respondentUser.gender;
+          gMap.set(gKey, (gMap.get(gKey) ?? 0) + 1);
+        }
+        if (submission.respondentUser.birthday) {
+          const ag = ageGroup(ageFromBirthday(submission.respondentUser.birthday));
+          const aMap = optionAgeGroupMap.get(oid)!;
+          aMap.set(ag, (aMap.get(ag) ?? 0) + 1);
+        }
       }
     }
+
+    const buildBreakdown = (countMap: Map<string, number>, base: number) =>
+      Array.from(countMap.entries()).map(([label, count]) => ({
+        label,
+        count,
+        percentage: base === 0 ? 0 : Number(((count / base) * 100).toFixed(1))
+      }));
 
     return {
       questionId: question.id,
       questionText: question.text,
       answeredCount,
-      options: question.options.map((option) => ({
-        optionId: option.id,
-        optionLabel: option.label,
-        count: optionCounts.get(option.id) ?? 0,
-        percentage:
-          answeredCount === 0
-            ? 0
-            : Number((((optionCounts.get(option.id) ?? 0) / answeredCount) * 100).toFixed(2)),
-        // Avatar stack data: up to 8 voter previews per option
-        voterPreviews: optionVoterPreviews.get(option.id) ?? []
-      }))
+      options: question.options.map((option) => {
+        const optCount = optionCounts.get(option.id) ?? 0;
+        return {
+          optionId: option.id,
+          optionLabel: option.label,
+          count: optCount,
+          percentage:
+            answeredCount === 0
+              ? 0
+              : Number(((optCount / answeredCount) * 100).toFixed(2)),
+          // Avatar stack data
+          voterPreviews: optionVoterPreviews.get(option.id) ?? [],
+          // Demographics if announced
+          demographics: includeDemographics
+            ? {
+                gender: buildBreakdown(optionGenderMap.get(option.id)!, optCount),
+                ageGroups: buildBreakdown(optionAgeGroupMap.get(option.id)!, optCount)
+              }
+            : null
+        };
+      })
     };
   });
 
@@ -321,9 +383,10 @@ export const getPublicPollResults = async (slug: string) => {
       maxResponses: poll.maxResponses,
       expiresAt: poll.expiresAt.toISOString(),
       isPublished: poll.isPublished,
+      isAnnounced: poll.isAnnounced,
       state: !poll.isPublished ? "draft" : open ? "active" : "closed"
     },
-    overview: { totalResponses },
+    overview: { totalResponses, hasSufficientDemoData },
     voters,
     questions: questionSummaries,
     updatedAt: nowIso()

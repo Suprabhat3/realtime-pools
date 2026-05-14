@@ -1,10 +1,14 @@
 import crypto from "node:crypto";
+import { Resend } from "resend";
 
 import type { Prisma, ResponseMode } from "@prisma/client";
 
+import { env } from "../../config/env";
 import { prisma } from "../../lib/prisma";
 import { HttpError } from "../../middleware/error-handler";
 import type { CreatePollInput, UpdatePollInput } from "./polls.schemas";
+
+const resend = new Resend(env.RESEND_API_KEY);
 
 const pollWithRelationsInclude = {
   questions: {
@@ -39,10 +43,11 @@ const createSlug = (title: string) => {
  *   "closed" → isPublished = true   AND (time-expired OR votes >= maxResponses)
  */
 const pollState = (
-  poll: { isPublished: boolean; expiresAt: Date; maxResponses: number | null },
+  poll: { isPublished: boolean; isAnnounced: boolean; expiresAt: Date; maxResponses: number | null },
   totalResponses: number
 ) => {
   if (!poll.isPublished) return "draft";
+  if (poll.isAnnounced) return "closed";
   const timeExpired = poll.expiresAt.getTime() < Date.now();
   const voteLimitReached = poll.maxResponses !== null && totalResponses >= poll.maxResponses;
   if (timeExpired || voteLimitReached) return "closed";
@@ -65,6 +70,7 @@ const mapPollSummary = (poll: PollWithRelations) => {
     updatedAt: poll.updatedAt.toISOString(),
     totalQuestions: poll.questions.length,
     totalResponses,
+    isAnnounced: poll.isAnnounced,
     state: pollState(poll, totalResponses)
   };
 };
@@ -217,6 +223,84 @@ export const publishPoll = async (pollId: string, creatorId: string) => {
     slug: updated.slug,
     isPublished: updated.isPublished,
     publishedAt: updated.updatedAt.toISOString()
+  };
+};
+
+export const announcePollResults = async (pollId: string, creatorId: string) => {
+  const poll = await ensurePollOwned(pollId, creatorId);
+
+  const timeExpired = poll.expiresAt.getTime() < Date.now();
+  const voteLimitReached = poll.maxResponses !== null && poll._count.submissions >= poll.maxResponses;
+  if (!poll.isPublished || (!timeExpired && !voteLimitReached)) {
+    throw new HttpError(400, "You can only announce results for closed polls.");
+  }
+
+  const updated = await prisma.poll.update({
+    where: { id: pollId },
+    data: { isAnnounced: true }
+  });
+
+  const submissions = await prisma.submission.findMany({
+    where: { pollId },
+    include: { respondentUser: true }
+  });
+
+  const uniqueVoterEmails = Array.from(
+    new Set(
+      submissions
+        .map((s) => s.respondentUser?.email)
+        .filter((email): email is string => !!email)
+    )
+  );
+
+  if (uniqueVoterEmails.length > 0) {
+    // Best effort frontend URL
+    const pollUrl = `http://localhost:5173/p/${poll.slug}`;
+    try {
+      await resend.emails.send({
+        from: env.RESEND_FROM_EMAIL,
+        to: uniqueVoterEmails,
+        subject: `Results Announced: ${poll.title}`,
+        html: `
+          <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #f9fafb; padding: 40px 20px; color: #111827;">
+            <div style="background-color: #ffffff; border: 1px solid #f3f4f6; border-radius: 16px; padding: 40px; box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);">
+              <div style="text-align: center; margin-bottom: 30px;">
+                <div style="display: inline-block; width: 48px; height: 48px; border-radius: 50%; background-color: #ffe4e6; color: #e11d48; font-size: 24px; line-height: 48px; font-weight: bold; margin-bottom: 16px;">
+                  📣
+                </div>
+                <h1 style="margin: 0; font-size: 24px; font-weight: 800; color: #111827; letter-spacing: -0.025em;">
+                  The results are in!
+                </h1>
+              </div>
+              <p style="font-size: 16px; line-height: 1.6; color: #4b5563; margin-top: 0;">
+                You recently cast your vote on the poll <strong style="color: #111827;">"${poll.title}"</strong>, and the final results have just been announced by the creator.
+              </p>
+              <p style="font-size: 16px; line-height: 1.6; color: #4b5563;">
+                Head over to VibePoll now to see which option won, dive deep into the demographic breakdowns, and discover how your vote compares to the rest of the community.
+              </p>
+              <div style="text-align: center; margin-top: 40px; margin-bottom: 20px;">
+                <a href="${pollUrl}" style="display: inline-block; background-color: #e11d48; color: #ffffff; text-decoration: none; padding: 14px 28px; border-radius: 8px; font-weight: 700; font-size: 14px; letter-spacing: 0.05em; text-transform: uppercase;">
+                  View Final Results
+                </a>
+              </div>
+              <hr style="border: 0; border-top: 1px solid #f3f4f6; margin: 30px 0;" />
+              <p style="font-size: 12px; color: #9ca3af; text-align: center; margin: 0; line-height: 1.5;">
+                Thank you for participating and sharing your voice on <span style="font-weight: 600; color: #6b7280;">VibePoll</span>.<br/>
+                <a href="http://localhost:5173" style="color: #e11d48; text-decoration: none;">vibepoll.com</a>
+              </p>
+            </div>
+          </div>
+        `
+      });
+    } catch (err) {
+      console.error("Failed to send announce emails", err);
+    }
+  }
+
+  return {
+    id: updated.id,
+    slug: updated.slug,
+    isAnnounced: updated.isAnnounced
   };
 };
 

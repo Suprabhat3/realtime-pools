@@ -27,9 +27,18 @@ const PollCard = ({ poll }: { poll: PublicPollCard }) => {
           <p className="text-xs font-semibold text-gray-700 truncate">{poll.creator.name ?? "Anonymous"}</p>
           <p className="text-xs text-gray-400">{new Date(poll.createdAt).toLocaleDateString()}</p>
         </div>
-        <div className="flex items-center gap-1 text-xs font-bold text-brand-crimson shrink-0">
-          <div className="w-1.5 h-1.5 rounded-full bg-brand-crimson animate-pulse" />
-          LIVE
+        <div className="flex items-center gap-1 text-xs font-bold shrink-0 uppercase">
+          {poll.isAnnounced ? (
+            <span className="text-green-600 flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+              ANNOUNCED
+            </span>
+          ) : (
+            <span className="text-brand-crimson flex items-center gap-1">
+              <div className="w-1.5 h-1.5 rounded-full bg-brand-crimson animate-pulse" />
+              LIVE
+            </span>
+          )}
         </div>
       </div>
 
@@ -68,7 +77,9 @@ const PollCard = ({ poll }: { poll: PublicPollCard }) => {
             ? `${poll.totalVotes} / ${poll.maxResponses} votes`
             : `${poll.totalVotes} ${poll.totalVotes === 1 ? "vote" : "votes"}`}
         </span>
-        <span className="text-xs font-medium text-gray-400">{timeLeft(poll.expiresAt)}</span>
+        <span className="text-xs font-medium text-gray-400">
+          {poll.isAnnounced ? "Closed" : timeLeft(poll.expiresAt)}
+        </span>
       </div>
     </Link>
   );
