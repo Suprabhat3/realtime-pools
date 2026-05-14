@@ -9,7 +9,7 @@ const Footer = () => {
           ZenPoll
         </span>
         <span className="ml-4 font-normal">
-          © 2024 ZenPoll. Built for active transparency.
+          © 2026 ZenPoll. Built for active transparency.
         </span>
       </div>
       <div className="flex flex-col md:flex-row items-center gap-6 mt-4 md:mt-0">

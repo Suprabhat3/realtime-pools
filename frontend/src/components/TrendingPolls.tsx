@@ -20,61 +20,63 @@ const TrendingPollCard = ({ poll, rank }: { poll: PublicPollCard; rank: number }
   return (
     <Link
       to={`/p/${poll.slug}`}
-      className="group relative flex flex-col bg-white border border-gray-100 hover:border-brand-crimson/40 shadow-sm hover:shadow-md transition-all duration-200 overflow-hidden"
+      className="group relative flex flex-col bg-white border border-gray-100 hover:border-brand-crimson/40 shadow-md hover:shadow-xl rounded-xl transition-all duration-300 overflow-hidden"
     >
-      {/* Rank badge */}
-      <div className="absolute top-4 right-4 w-8 h-8 rounded-full bg-brand-crimson/8 flex items-center justify-center">
-        <span className="text-xs font-extrabold text-brand-crimson">#{rank}</span>
-      </div>
-
-      {/* Live indicator */}
-      <div className="flex items-center gap-2 px-5 pt-5 pb-3">
-        <div className="flex items-center gap-1.5 text-xs font-bold text-brand-crimson">
-          <div className="w-1.5 h-1.5 rounded-full bg-brand-crimson animate-pulse" />
-          LIVE
+      {/* Header section */}
+      <div className="flex items-center justify-between px-6 pt-6 pb-4">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 rounded-full bg-brand-crimson/10 flex items-center justify-center shrink-0">
+            <span className="text-sm font-extrabold text-brand-crimson">#{rank}</span>
+          </div>
+          <div className="flex flex-col">
+            <div className="flex items-center gap-1.5 text-[10px] font-bold tracking-wider text-brand-crimson uppercase">
+              <div className="w-1.5 h-1.5 rounded-full bg-brand-crimson animate-pulse" />
+              Live
+            </div>
+            <span className="text-xs font-medium text-gray-400">{timeLeft(poll.expiresAt)}</span>
+          </div>
         </div>
-        <span className="text-xs text-gray-400 ml-auto">{timeLeft(poll.expiresAt)}</span>
       </div>
 
       {/* Body */}
-      <div className="flex flex-col gap-4 px-5 pb-5 flex-1">
-        <h3 className="text-lg font-bold text-gray-900 leading-snug group-hover:text-brand-crimson transition-colors line-clamp-2 pr-8">
+      <div className="flex flex-col gap-5 px-6 pb-6 flex-1">
+        <h3 className="text-xl font-bold text-gray-900 leading-tight group-hover:text-brand-crimson transition-colors line-clamp-2">
           {poll.title}
         </h3>
 
         {/* Top 2 options preview */}
         {poll.firstQuestion && (
-          <div className="flex flex-col gap-2">
+          <div className="flex flex-col gap-2.5">
             {poll.firstQuestion.options.slice(0, 2).map((opt) => (
               <div
                 key={opt.id}
-                className="flex items-center gap-2 text-sm text-gray-600 border border-gray-100 group-hover:border-brand-crimson/20 rounded px-3 py-2 transition-colors"
+                className="flex items-center gap-3 text-sm text-gray-700 bg-gray-50 border border-transparent group-hover:bg-brand-crimson/5 group-hover:border-brand-crimson/20 rounded-lg px-4 py-3 transition-colors"
               >
-                <div className="w-3 h-3 rounded-full border-2 border-gray-300 shrink-0" />
-                <span className="truncate">{opt.label}</span>
+                <div className="w-4 h-4 rounded-full border-[3px] border-gray-300 group-hover:border-brand-crimson/40 shrink-0 bg-white" />
+                <span className="truncate font-medium">{opt.label}</span>
               </div>
             ))}
             {poll.firstQuestion.options.length > 2 && (
-              <p className="text-xs text-gray-400 pl-1">
-                +{poll.firstQuestion.options.length - 2} more options
+              <p className="text-xs font-medium text-gray-400 pl-1 mt-1">
+                + {poll.firstQuestion.options.length - 2} more options
               </p>
             )}
           </div>
         )}
 
         {/* Footer */}
-        <div className="flex items-center gap-3 pt-3 border-t border-gray-50 mt-auto">
+        <div className="flex items-center gap-3 pt-4 border-t border-gray-100 mt-auto">
           <img
             src={avatarUrl}
             alt={poll.creator.name ?? "creator"}
-            className="w-6 h-6 rounded-full bg-gray-100 shrink-0"
+            className="w-8 h-8 rounded-full bg-gray-100 shrink-0 border border-gray-200"
           />
-          <span className="text-xs font-medium text-gray-500 truncate flex-1">
+          <span className="text-sm font-semibold text-gray-600 truncate flex-1">
             {poll.creator.name ?? "Anonymous"}
           </span>
-          <span className="text-xs font-bold text-brand-crimson shrink-0">
+          <span className="text-xs font-bold text-brand-crimson bg-brand-crimson/5 px-2.5 py-1 rounded-full shrink-0 border border-brand-crimson/10">
             {poll.maxResponses
-              ? `${poll.totalVotes} / ${poll.maxResponses}`
+              ? `${poll.totalVotes} / ${poll.maxResponses} votes`
               : `${poll.totalVotes} votes`}
           </span>
         </div>
@@ -84,19 +86,27 @@ const TrendingPollCard = ({ poll, rank }: { poll: PublicPollCard; rank: number }
 };
 
 const SkeletonCard = () => (
-  <div className="flex flex-col bg-white border border-gray-100 overflow-hidden animate-pulse">
-    <div className="px-5 pt-5 pb-3">
-      <div className="h-3 bg-gray-200 rounded w-12" />
+  <div className="flex flex-col bg-white border border-gray-100 rounded-xl shadow-sm overflow-hidden animate-pulse">
+    <div className="flex items-center gap-3 px-6 pt-6 pb-4">
+      <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0" />
+      <div className="flex flex-col gap-1.5">
+        <div className="h-2.5 bg-gray-200 rounded w-10" />
+        <div className="h-2.5 bg-gray-200 rounded w-16" />
+      </div>
     </div>
-    <div className="flex flex-col gap-3 px-5 pb-5">
-      <div className="h-5 bg-gray-200 rounded w-3/4" />
-      <div className="h-4 bg-gray-100 rounded w-full" />
-      <div className="h-9 bg-gray-100 rounded" />
-      <div className="h-9 bg-gray-100 rounded" />
-      <div className="flex items-center gap-2 pt-2 border-t border-gray-50">
-        <div className="w-6 h-6 rounded-full bg-gray-200" />
-        <div className="h-3 bg-gray-100 rounded w-24 flex-1" />
-        <div className="h-3 bg-gray-200 rounded w-16" />
+    <div className="flex flex-col gap-5 px-6 pb-6">
+      <div className="space-y-2">
+        <div className="h-6 bg-gray-200 rounded w-full" />
+        <div className="h-6 bg-gray-200 rounded w-3/4" />
+      </div>
+      <div className="space-y-2.5">
+        <div className="h-11 bg-gray-100 rounded-lg w-full" />
+        <div className="h-11 bg-gray-100 rounded-lg w-full" />
+      </div>
+      <div className="flex items-center gap-3 pt-4 border-t border-gray-100">
+        <div className="w-8 h-8 rounded-full bg-gray-200 shrink-0" />
+        <div className="h-4 bg-gray-100 rounded w-24 flex-1" />
+        <div className="h-6 bg-gray-200 rounded-full w-20" />
       </div>
     </div>
   </div>
