@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { closePoll, getCreatorPolls, announcePollResults, type PollSummary } from "../lib/polls-api";
+import { getRealtimeSocket } from "../lib/realtime";
 
 const DashboardPage = () => {
   const [polls, setPolls] = useState<PollSummary[]>([]);
@@ -9,15 +10,53 @@ const DashboardPage = () => {
   const [closingId, setClosingId] = useState<string | null>(null);
   const [announcingId, setAnnouncingId] = useState<string | null>(null);
 
-  const fetchPolls = () => {
+  const refreshTimeoutRef = useRef<number | null>(null);
+
+  const fetchPolls = useCallback(() => {
     setLoading(true);
     getCreatorPolls()
       .then((res) => setPolls(res.data))
       .catch((err) => console.error("Failed to fetch polls", err))
       .finally(() => setLoading(false));
-  };
+  }, []);
 
-  useEffect(() => { fetchPolls(); }, []);
+  useEffect(() => { fetchPolls(); }, [fetchPolls]);
+
+  useEffect(() => {
+    const socket = getRealtimeSocket();
+    const joinedPollIds = new Set<string>();
+
+    polls.forEach((poll) => {
+      if (!joinedPollIds.has(poll.id)) {
+        socket.emit("poll:join-owner", { pollId: poll.id });
+        joinedPollIds.add(poll.id);
+      }
+    });
+
+    const scheduleRefresh = () => {
+      if (refreshTimeoutRef.current !== null) {
+        window.clearTimeout(refreshTimeoutRef.current);
+      }
+      refreshTimeoutRef.current = window.setTimeout(() => {
+        fetchPolls();
+      }, 250);
+    };
+
+    socket.on("responses:count", scheduleRefresh);
+    socket.on("analytics:update", scheduleRefresh);
+
+    return () => {
+      joinedPollIds.forEach((pollId) => {
+        socket.emit("poll:leave-owner", { pollId });
+      });
+      socket.off("responses:count", scheduleRefresh);
+      socket.off("analytics:update", scheduleRefresh);
+      if (refreshTimeoutRef.current !== null) {
+        window.clearTimeout(refreshTimeoutRef.current);
+        refreshTimeoutRef.current = null;
+      }
+    };
+  }, [polls, fetchPolls]);
 
   const handleCopyLink = (poll: PollSummary) => {
     navigator.clipboard.writeText(`${window.location.origin}/p/${poll.slug}`).then(() => {
@@ -245,3 +284,4 @@ const DashboardPage = () => {
 };
 
 export default DashboardPage;
+
