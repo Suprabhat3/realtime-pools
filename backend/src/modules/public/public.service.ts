@@ -185,14 +185,13 @@ export const submitPublicResponse = async (
     if (!validOption) throw new HttpError(400, "Invalid option selected");
   }
 
-  const isAnonymousSubmission =
-    poll.responseMode === "ANONYMOUS" ? (payload.submitAsAnonymous ?? true) : false;
+  // A submission is anonymous only when the user is genuinely NOT authenticated.
+  // If the user IS authenticated, we always link their identity (even on ANONYMOUS polls)
+  // so analytics can show real demographics. An ANONYMOUS poll means auth isn't required
+  // to vote — not that authenticated voters become invisible.
+  const isAnonymousSubmission = !user;
 
-  const respondentUserId = !isAnonymousSubmission && user ? user.id : null;
-
-  if (poll.responseMode === "AUTHENTICATED" && !respondentUserId) {
-    throw new HttpError(401, "You must be signed in to vote on this poll");
-  }
+  const respondentUserId = user ? user.id : null;
 
   // Dedup for authenticated users
   if (respondentUserId) {
@@ -246,13 +245,19 @@ export const getPublicPollResults = async (slug: string) => {
     where: { pollId: poll.id },
     include: {
       answers: true,
-      respondentUser: { select: { id: true, name: true, email: true } }
+      respondentUser: { select: { id: true, name: true, email: true, image: true } }
     }
   });
 
   const questionSummaries = poll.questions.map((question) => {
     const optionCounts = new Map<string, number>();
-    for (const option of question.options) optionCounts.set(option.id, 0);
+    // Map of optionId → list of voter previews (capped at 8 for avatar stack)
+    const optionVoterPreviews = new Map<string, { name: string | null; image: string | null; isAnonymous: boolean }[]>();
+
+    for (const option of question.options) {
+      optionCounts.set(option.id, 0);
+      optionVoterPreviews.set(option.id, []);
+    }
 
     let answeredCount = 0;
     for (const submission of submissions) {
@@ -260,6 +265,19 @@ export const getPublicPollResults = async (slug: string) => {
       if (!answer) continue;
       answeredCount += 1;
       optionCounts.set(answer.optionId, (optionCounts.get(answer.optionId) ?? 0) + 1);
+
+      // Accumulate voter previews (cap at 8 per option for avatar stack display)
+      const previews = optionVoterPreviews.get(answer.optionId) ?? [];
+      if (previews.length < 8) {
+        previews.push({
+          name: submission.isAnonymous
+            ? null
+            : (submission.respondentUser?.name ?? submission.respondentUser?.email ?? null),
+          image: submission.isAnonymous ? null : (submission.respondentUser?.image ?? null),
+          isAnonymous: submission.isAnonymous
+        });
+        optionVoterPreviews.set(answer.optionId, previews);
+      }
     }
 
     return {
@@ -273,7 +291,9 @@ export const getPublicPollResults = async (slug: string) => {
         percentage:
           answeredCount === 0
             ? 0
-            : Number((((optionCounts.get(option.id) ?? 0) / answeredCount) * 100).toFixed(2))
+            : Number((((optionCounts.get(option.id) ?? 0) / answeredCount) * 100).toFixed(2)),
+        // Avatar stack data: up to 8 voter previews per option
+        voterPreviews: optionVoterPreviews.get(option.id) ?? []
       }))
     };
   });
@@ -284,6 +304,7 @@ export const getPublicPollResults = async (slug: string) => {
           .filter((s) => s.respondentUser)
           .map((s) => ({
             name: s.respondentUser!.name ?? s.respondentUser!.email ?? "User",
+            image: s.respondentUser!.image ?? null,
             submittedAt: s.submittedAt.toISOString()
           }))
       : undefined;

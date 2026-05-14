@@ -220,6 +220,28 @@ export const publishPoll = async (pollId: string, creatorId: string) => {
   };
 };
 
+// ── Analytics helpers ─────────────────────────────────────────────────────────
+
+const DEMOGRAPHICS_MIN_VOTERS = 3;
+
+/** Compute age in full years from a Date of birth. */
+const ageFromBirthday = (birthday: Date): number => {
+  const now = new Date();
+  let age = now.getFullYear() - birthday.getFullYear();
+  const m = now.getMonth() - birthday.getMonth();
+  if (m < 0 || (m === 0 && now.getDate() < birthday.getDate())) age--;
+  return age;
+};
+
+const ageGroup = (age: number): string => {
+  if (age < 18) return "Under 18";
+  if (age <= 24) return "18–24";
+  if (age <= 34) return "25–34";
+  if (age <= 44) return "35–44";
+  if (age <= 54) return "45–54";
+  return "55+";
+};
+
 export const getPollAnalytics = async (pollId: string, creatorId: string) => {
   const poll = await ensurePollOwned(pollId, creatorId);
 
@@ -227,7 +249,9 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
     where: { pollId },
     include: {
       answers: { include: { option: true } },
-      respondentUser: { select: { id: true, name: true, email: true } }
+      respondentUser: {
+        select: { id: true, name: true, email: true, image: true, gender: true, birthday: true }
+      }
     }
   });
 
@@ -235,17 +259,72 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
   const authenticatedResponses = submissions.filter((s) => !s.isAnonymous).length;
   const anonymousResponses = submissions.filter((s) => s.isAnonymous).length;
 
+  // Minimum threshold for demographic breakdowns to be meaningful
+  const hasSufficientDemoData = authenticatedResponses >= DEMOGRAPHICS_MIN_VOTERS;
+
   const questionSummaries = poll.questions.map((question) => {
     const optionCounts = new Map<string, number>();
-    for (const option of question.options) optionCounts.set(option.id, 0);
+    // Per-option: voter cards (name, image, gender, ageGroup)
+    const optionVoterCards = new Map<
+      string,
+      { name: string; image: string | null; isAnonymous: boolean; gender: string | null; ageGroup: string | null }[]
+    >();
+    // Per-option gender tallies
+    const optionGenderMap = new Map<string, Map<string, number>>();
+    // Per-option age-group tallies
+    const optionAgeGroupMap = new Map<string, Map<string, number>>();
+
+    for (const option of question.options) {
+      optionCounts.set(option.id, 0);
+      optionVoterCards.set(option.id, []);
+      optionGenderMap.set(option.id, new Map());
+      optionAgeGroupMap.set(option.id, new Map());
+    }
 
     let answeredCount = 0;
     for (const submission of submissions) {
       const answer = submission.answers.find((entry) => entry.questionId === question.id);
       if (!answer) continue;
       answeredCount += 1;
-      optionCounts.set(answer.optionId, (optionCounts.get(answer.optionId) ?? 0) + 1);
+      const oid = answer.optionId;
+      optionCounts.set(oid, (optionCounts.get(oid) ?? 0) + 1);
+
+      // Voter card (all voters, anonymous included)
+      const cards = optionVoterCards.get(oid) ?? [];
+      cards.push({
+        name: submission.isAnonymous
+          ? "Anonymous"
+          : (submission.respondentUser?.name ?? submission.respondentUser?.email ?? "User"),
+        image: submission.isAnonymous ? null : (submission.respondentUser?.image ?? null),
+        isAnonymous: submission.isAnonymous,
+        gender: submission.respondentUser?.gender ?? null,
+        ageGroup: submission.respondentUser?.birthday
+          ? ageGroup(ageFromBirthday(submission.respondentUser.birthday))
+          : null
+      });
+      optionVoterCards.set(oid, cards);
+
+      // Gender tally (only for authenticated with data)
+      if (!submission.isAnonymous && submission.respondentUser?.gender) {
+        const gMap = optionGenderMap.get(oid)!;
+        const gKey = submission.respondentUser.gender;
+        gMap.set(gKey, (gMap.get(gKey) ?? 0) + 1);
+      }
+
+      // Age-group tally
+      if (!submission.isAnonymous && submission.respondentUser?.birthday) {
+        const ag = ageGroup(ageFromBirthday(submission.respondentUser.birthday));
+        const aMap = optionAgeGroupMap.get(oid)!;
+        aMap.set(ag, (aMap.get(ag) ?? 0) + 1);
+      }
     }
+
+    const buildBreakdown = (countMap: Map<string, number>, base: number) =>
+      Array.from(countMap.entries()).map(([label, count]) => ({
+        label,
+        count,
+        percentage: base === 0 ? 0 : Number(((count / base) * 100).toFixed(1))
+      }));
 
     return {
       questionId: question.id,
@@ -253,27 +332,39 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
       isRequired: question.isRequired,
       answeredCount,
       skippedCount: totalResponses - answeredCount,
-      optionCounts: question.options.map((option) => ({
-        optionId: option.id,
-        optionLabel: option.label,
-        count: optionCounts.get(option.id) ?? 0,
-        percentage:
-          answeredCount === 0
-            ? 0
-            : Number((((optionCounts.get(option.id) ?? 0) / answeredCount) * 100).toFixed(2))
-      }))
+      optionCounts: question.options.map((option) => {
+        const optCount = optionCounts.get(option.id) ?? 0;
+        const gMap = optionGenderMap.get(option.id)!;
+        const aMap = optionAgeGroupMap.get(option.id)!;
+        const cards = optionVoterCards.get(option.id) ?? [];
+
+        return {
+          optionId: option.id,
+          optionLabel: option.label,
+          count: optCount,
+          percentage:
+            answeredCount === 0
+              ? 0
+              : Number(((optCount / answeredCount) * 100).toFixed(2)),
+          // All voter cards (name + image) for this option
+          voterCards: cards,
+          // Avatar stack preview (first 8)
+          voterPreviews: cards.slice(0, 8).map((c) => ({
+            name: c.name,
+            image: c.image,
+            isAnonymous: c.isAnonymous
+          })),
+          // Demographic breakdowns — suppressed when below threshold
+          demographics: hasSufficientDemoData
+            ? {
+                gender: buildBreakdown(gMap, optCount),
+                ageGroups: buildBreakdown(aMap, optCount)
+              }
+            : null
+        };
+      })
     };
   });
-
-  const voters =
-    poll.responseMode === "AUTHENTICATED"
-      ? submissions
-          .filter((s) => s.respondentUser)
-          .map((s) => ({
-            name: s.respondentUser!.name ?? s.respondentUser!.email ?? "User",
-            submittedAt: s.submittedAt.toISOString()
-          }))
-      : undefined;
 
   return {
     poll: {
@@ -290,9 +381,9 @@ export const getPollAnalytics = async (pollId: string, creatorId: string) => {
     overview: {
       totalResponses,
       authenticatedResponses,
-      anonymousResponses
+      anonymousResponses,
+      hasSufficientDemoData
     },
-    voters,
     questions: questionSummaries,
     updatedAt: new Date().toISOString()
   };

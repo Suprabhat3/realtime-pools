@@ -18,6 +18,11 @@ import DashboardPage from "./pages/DashboardPage";
 import CreatePollPage from "./pages/CreatePollPage";
 import ExplorerPage from "./pages/ExplorerPage";
 import PollDetailsPage from "./pages/PollDetailsPage";
+import PrivacyPage from "./pages/PrivacyPage";
+import TermsPage from "./pages/TermsPage";
+import HelpPage from "./pages/HelpPage";
+import ContactPage from "./pages/ContactPage";
+import PollAnalyticsPage from "./pages/PollAnalyticsPage";
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
@@ -52,6 +57,18 @@ createRoot(document.getElementById("root")!).render(
             <Route path="/explorer" element={<ExplorerPage />} />
             <Route path="/p/:slug" element={<PollDetailsPage />} />
             <Route path="/p/:slug/results" element={<PollDetailsPage />} />
+            <Route path="/privacy" element={<PrivacyPage />} />
+            <Route path="/terms" element={<TermsPage />} />
+            <Route path="/help" element={<HelpPage />} />
+            <Route path="/contact" element={<ContactPage />} />
+            <Route
+              path="/polls/:pollId/analytics"
+              element={
+                <ProtectedRoute>
+                  <PollAnalyticsPage />
+                </ProtectedRoute>
+              }
+            />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

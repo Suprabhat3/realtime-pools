@@ -172,6 +172,19 @@ const DashboardPage = () => {
                       VIEW
                     </Link>
 
+                    {/* Analytics */}
+                    <Link
+                      to={`/polls/${poll.id}/analytics`}
+                      className="flex items-center gap-1.5 border border-brand-crimson/30 text-brand-crimson hover:bg-red-50 text-xs font-bold tracking-widest uppercase px-3 py-2 transition-colors"
+                    >
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="20" x2="18" y2="10" />
+                        <line x1="12" y1="20" x2="12" y2="4" />
+                        <line x1="6" y1="20" x2="6" y2="14" />
+                      </svg>
+                      ANALYTICS
+                    </Link>
+
                     {/* Close — only for active polls */}
                     {poll.state === "active" && (
                       <button

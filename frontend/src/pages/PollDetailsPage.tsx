@@ -10,6 +10,86 @@ import {
 } from "../lib/polls-api";
 import { useAuth } from "../auth/AuthProvider";
 
+// ─── Helper: resolve avatar URL ──────────────────────────────────────────────
+
+const resolveAvatar = (name: string | null, image: string | null, isAnonymous: boolean): string => {
+  if (!isAnonymous && image) return image;
+  if (!isAnonymous && name) {
+    return `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(name)}`;
+  }
+  // Generic ghost avatar for anonymous voters
+  return `https://api.dicebear.com/7.x/shapes/svg?seed=anon&backgroundColor=e2e8f0`;
+};
+
+// ─── Sub-component: Voter Avatar Stack ───────────────────────────────────────
+
+interface VoterPreview {
+  name: string | null;
+  image: string | null;
+  isAnonymous: boolean;
+}
+
+const AvatarStack = ({
+  voters,
+  totalCount,
+  isAnonymousMode
+}: {
+  voters: VoterPreview[];
+  totalCount: number;
+  isAnonymousMode: boolean;
+}) => {
+  if (totalCount === 0) return null;
+
+  // For fully anonymous polls, just show the count number
+  if (isAnonymousMode) {
+    return (
+      <div className="flex items-center gap-1.5 ml-auto shrink-0">
+        <div className="flex items-center justify-center w-7 h-7 rounded-full bg-gray-100 border border-gray-200">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" />
+            <circle cx="9" cy="7" r="4" />
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87" />
+            <path d="M16 3.13a4 4 0 0 1 0 7.75" />
+          </svg>
+        </div>
+        <span className="text-xs font-bold text-gray-500">{totalCount}</span>
+      </div>
+    );
+  }
+
+  // Authenticated mode: show real avatar stack
+  const displayVoters = voters.slice(0, 5);
+  const overflow = totalCount - displayVoters.length;
+
+  return (
+    <div className="flex items-center gap-2 ml-auto shrink-0">
+      <div className="flex -space-x-2">
+        {displayVoters.map((v, i) => (
+          <img
+            key={i}
+            src={resolveAvatar(v.name, v.image, v.isAnonymous)}
+            alt={v.name ?? "Voter"}
+            title={v.isAnonymous ? "Anonymous voter" : (v.name ?? "Voter")}
+            className="w-7 h-7 rounded-full border-2 border-white object-cover bg-gray-100 shrink-0"
+            style={{ zIndex: displayVoters.length - i }}
+          />
+        ))}
+        {overflow > 0 && (
+          <div
+            className="w-7 h-7 rounded-full border-2 border-white bg-gray-200 flex items-center justify-center shrink-0"
+            style={{ zIndex: 0 }}
+          >
+            <span className="text-[9px] font-bold text-gray-600">+{overflow}</span>
+          </div>
+        )}
+      </div>
+      <span className="text-xs font-bold text-gray-400 tabular-nums">{totalCount}</span>
+    </div>
+  );
+};
+
+// ─── Main Page ────────────────────────────────────────────────────────────────
+
 const PollDetailsPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
@@ -115,8 +195,9 @@ const PollDetailsPage = () => {
   }
 
   const question = poll.questions[0];
-  const isPollExpired = !!poll.isExpired; // true when time-expired OR vote cap reached
+  const isPollExpired = !!poll.isExpired;
   const requiresAuth = poll.responseMode === "AUTHENTICATED";
+  const isAnonymousPoll = poll.responseMode === "ANONYMOUS";
 
   const timeLeft = (() => {
     const ms = new Date(poll.expiresAt).getTime() - Date.now();
@@ -129,6 +210,10 @@ const PollDetailsPage = () => {
   const avatarUrl =
     poll.creator?.image ??
     `https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(poll.creator?.name ?? slug ?? "poll")}`;
+
+  // Helper to get results option data by id
+  const getResultOption = (optionId: string) =>
+    results?.questions?.[0]?.options?.find((o: any) => o.optionId === optionId);
 
   return (
     <div className="flex flex-col lg:flex-row w-full gap-16 text-gray-900 mt-4">
@@ -195,48 +280,64 @@ const PollDetailsPage = () => {
         {(!requiresAuth || isAuthenticated) && !isPollExpired && (
           <>
             <div className="flex flex-col gap-4">
-              {question.options.map((option: any) => (
-                <button
-                  key={option.id}
-                  onClick={() => !hasVoted && setSelectedOption(option.id)}
-                  disabled={hasVoted}
-                  className={`flex items-center gap-4 p-6 border transition-all text-left group ${
-                    hasVoted && results
-                      ? "cursor-default border-gray-100"
-                      : selectedOption === option.id
-                      ? "border-brand-crimson bg-red-50/20 text-brand-crimson"
-                      : "border-red-100 text-gray-700 hover:border-brand-crimson/50 hover:bg-red-50/10"
-                  }`}
-                >
-                  <div
-                    className={`w-6 h-6 border flex items-center justify-center shrink-0 ${
-                      selectedOption === option.id ? "border-brand-crimson" : "border-red-200"
+              {question.options.map((option: any) => {
+                const resultOption = getResultOption(option.id);
+                const pct = resultOption?.percentage ?? 0;
+                const count = resultOption?.count ?? 0;
+                const voterPreviews: VoterPreview[] = resultOption?.voterPreviews ?? [];
+                const isSelected = selectedOption === option.id;
+
+                return (
+                  <button
+                    key={option.id}
+                    onClick={() => !hasVoted && setSelectedOption(option.id)}
+                    disabled={hasVoted}
+                    className={`flex flex-col gap-3 p-5 border transition-all text-left group ${
+                      hasVoted && results
+                        ? "cursor-default border-gray-100"
+                        : isSelected
+                        ? "border-brand-crimson bg-red-50/20 text-brand-crimson"
+                        : "border-red-100 text-gray-700 hover:border-brand-crimson/50 hover:bg-red-50/10"
                     }`}
                   >
-                    {selectedOption === option.id && <div className="w-3 h-3 bg-brand-crimson" />}
-                  </div>
-                  <span className="text-lg font-bold">{option.label}</span>
+                    {/* Top row: checkbox + label + avatar stack */}
+                    <div className="flex items-center gap-4 w-full">
+                      <div
+                        className={`w-6 h-6 border flex items-center justify-center shrink-0 ${
+                          isSelected ? "border-brand-crimson" : "border-red-200"
+                        }`}
+                      >
+                        {isSelected && <div className="w-3 h-3 bg-brand-crimson" />}
+                      </div>
+                      <span className="text-lg font-bold flex-1">{option.label}</span>
 
-                  {/* Show inline result bar if voted */}
-                  {hasVoted && results && (() => {
-                    const resultOption = results.questions[0]?.options?.find(
-                      (o: any) => o.optionId === option.id
-                    );
-                    const pct = resultOption?.percentage ?? 0;
-                    return (
-                      <div className="flex-1 flex items-center gap-3 ml-2">
-                        <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                      {/* Avatar stack — always show after voting */}
+                      {hasVoted && results && (
+                        <AvatarStack
+                          voters={voterPreviews}
+                          totalCount={count}
+                          isAnonymousMode={isAnonymousPoll}
+                        />
+                      )}
+                    </div>
+
+                    {/* Progress bar — shown after voting */}
+                    {hasVoted && results && (
+                      <div className="flex items-center gap-3 w-full pl-10">
+                        <div className="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
                           <div
                             className="h-full bg-brand-crimson/60 rounded-full transition-all duration-700"
                             style={{ width: `${pct}%` }}
                           />
                         </div>
-                        <span className="text-xs font-bold text-gray-500 w-10 text-right">{pct}%</span>
+                        <span className="text-xs font-bold text-gray-500 w-10 text-right tabular-nums">
+                          {pct}%
+                        </span>
                       </div>
-                    );
-                  })()}
-                </button>
-              ))}
+                    )}
+                  </button>
+                );
+              })}
             </div>
 
             {!hasVoted && (
@@ -277,11 +378,11 @@ const PollDetailsPage = () => {
         {/* Expired poll message */}
         {isPollExpired && (
           <div className="p-6 border border-gray-100 bg-gray-50 rounded-lg text-center">
-            <p className="text-gray-500 font-medium">This poll is closed. View the final results on the right. →</p>
+            <p className="text-gray-500 font-medium">This poll is closed. View the final results below.</p>
           </div>
         )}
 
-        {/* Full results section (shown after voting OR if poll is closed) */}
+        {/* Full results section */}
         {(hasVoted || isPollExpired) && results && (
           <div className="flex flex-col gap-8 mt-2 pb-12">
             <div className="flex flex-col gap-1">
@@ -289,20 +390,29 @@ const PollDetailsPage = () => {
               <span className="text-xs font-bold tracking-widest uppercase text-gray-500">LIVE STATISTICS</span>
             </div>
 
-            <div className="flex flex-col gap-6">
+            <div className="flex flex-col gap-5">
               {results.questions[0].options.map((opt: any) => (
-                <div key={opt.optionId} className="flex flex-col gap-2">
-                  <div className="flex justify-between items-center px-1">
+                <div key={opt.optionId} className="flex flex-col gap-2 p-4 bg-white border border-gray-100 rounded-lg shadow-sm">
+                  <div className="flex justify-between items-center">
                     <span className="text-base font-bold text-gray-800">{opt.optionLabel}</span>
-                    <span className="text-base font-bold text-brand-crimson">{opt.percentage}%</span>
+                    <span className="text-base font-bold text-brand-crimson tabular-nums">{opt.percentage}%</span>
                   </div>
-                  <div className="h-3 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
                     <div
                       className="h-full bg-brand-crimson/70 rounded-full transition-all duration-700"
                       style={{ width: `${opt.percentage}%` }}
                     />
                   </div>
-                  <p className="text-xs text-gray-400 pl-1">{opt.count} votes</p>
+
+                  {/* Footer row: count + avatar stack */}
+                  <div className="flex items-center justify-between mt-1">
+                    <p className="text-xs text-gray-400">{opt.count} vote{opt.count !== 1 ? "s" : ""}</p>
+                    <AvatarStack
+                      voters={opt.voterPreviews ?? []}
+                      totalCount={opt.count}
+                      isAnonymousMode={isAnonymousPoll}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -310,17 +420,17 @@ const PollDetailsPage = () => {
             {/* Voter list for AUTHENTICATED polls */}
             {requiresAuth && results.voters && results.voters.length > 0 && (
               <div className="flex flex-col gap-3 pt-6 border-t border-gray-100">
-                <h3 className="text-sm font-bold text-gray-700 tracking-wide">Voters</h3>
+                <h3 className="text-sm font-bold text-gray-700 tracking-wide uppercase">Voters</h3>
                 <div className="flex flex-col gap-2">
                   {results.voters.map((voter: any, i: number) => (
-                    <div key={i} className="flex items-center gap-3 text-sm">
+                    <div key={i} className="flex items-center gap-3 text-sm p-3 bg-white border border-gray-100 rounded-lg">
                       <img
-                        src={`https://api.dicebear.com/7.x/notionists/svg?seed=${encodeURIComponent(voter.name)}`}
+                        src={resolveAvatar(voter.name, voter.image, false)}
                         alt={voter.name}
-                        className="w-7 h-7 rounded-full bg-gray-100"
+                        className="w-8 h-8 rounded-full bg-gray-100 object-cover shrink-0"
                       />
-                      <span className="font-medium text-gray-800">{voter.name}</span>
-                      <span className="text-gray-400 text-xs ml-auto">
+                      <span className="font-medium text-gray-800 flex-1">{voter.name}</span>
+                      <span className="text-gray-400 text-xs">
                         {new Date(voter.submittedAt).toLocaleDateString()}
                       </span>
                     </div>
@@ -390,7 +500,7 @@ const PollDetailsPage = () => {
 
           <div className="flex justify-between items-center border-b border-gray-100 pb-4">
             <span className="text-gray-600 font-medium">Total Votes</span>
-            <span className="text-2xl font-bold text-brand-crimson">{results?.overview?.totalResponses ?? 0}</span>
+            <span className="text-2xl font-bold text-brand-crimson tabular-nums">{results?.overview?.totalResponses ?? 0}</span>
           </div>
 
           <div className="flex justify-between items-center border-b border-gray-100 pb-4">

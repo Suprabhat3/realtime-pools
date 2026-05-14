@@ -1,8 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
-import BackgroundElements from "../components/BackgroundElements";
-import Header from "../components/Header";
 import { useAuth } from "../auth/AuthProvider";
 import { getImageKitSignature, getMyProfile, updateMyProfile, type UserProfile } from "../lib/user-api";
 
@@ -317,12 +315,9 @@ const ProfilePage = () => {
   }, [loadedImage, cropZoom]);
 
   return (
-    <div className="relative min-h-screen flex flex-col overflow-x-hidden">
-      <BackgroundElements />
-      <Header />
-      <main className="relative z-10 flex grow items-start justify-center px-4 py-10">
-        <section className="w-full max-w-4xl border border-gray-200 bg-white/85 backdrop-blur-sm p-8 shadow-sm">
-          <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-crimson">Profile</p>
+    <div className="flex w-full justify-center">
+      <div className="w-full max-w-4xl bg-white border border-red-50 p-8 md:p-12 shadow-sm rounded-xl">
+        <p className="text-xs font-bold uppercase tracking-[0.2em] text-brand-crimson">Profile</p>
           <h1 className="mt-2 text-3xl font-bold text-gray-900">Your profile</h1>
           <p className="mt-2 text-sm text-gray-600">Manage your personal information and avatar.</p>
 
@@ -484,8 +479,7 @@ const ProfilePage = () => {
               </div>
             </div>
           </form>
-        </section>
-      </main>
+      </div>
 
       {pendingImageUrl ? (
         <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/60 p-4">
