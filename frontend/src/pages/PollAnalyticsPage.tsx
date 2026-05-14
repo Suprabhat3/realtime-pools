@@ -376,7 +376,7 @@ const PollAnalyticsPage = () => {
               <h2 className="text-xl font-bold text-gray-900">{question.questionText}</h2>
               <p className="text-sm text-gray-500">
                 {question.answeredCount} response{question.answeredCount !== 1 ? "s" : ""}
-                {question.skippedCount > 0 && ` · ${question.skippedCount} skipped`}
+                {question.skippedCount > 0 && ` Â· ${question.skippedCount} skipped`}
               </p>
             </div>
 
