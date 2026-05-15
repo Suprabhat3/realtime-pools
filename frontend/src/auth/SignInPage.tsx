@@ -9,7 +9,7 @@ import { signInWithEmail, signInWithGoogle, verifyEmailCode } from "../lib/auth-
 const SignInPage = () => {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const { refreshSession } = useAuth();
+  const { updateAuth } = useAuth();
   const redirectTo = searchParams.get("redirect") ?? "/dashboard";
 
   const [email, setEmail] = useState("");
@@ -45,8 +45,8 @@ const SignInPage = () => {
     setInfoMessage(null);
 
     try {
-      await verifyEmailCode(email, code);
-      await refreshSession();
+      const result = await verifyEmailCode(email, code);
+      updateAuth(result.data.user);
       navigate(redirectTo, { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to verify code";

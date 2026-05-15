@@ -8,7 +8,7 @@ import { signInWithEmail, signInWithGoogle, signUpWithEmail, verifyEmailCode } f
 
 const SignUpPage = () => {
   const navigate = useNavigate();
-  const { refreshSession } = useAuth();
+  const { updateAuth } = useAuth();
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -51,9 +51,9 @@ const SignUpPage = () => {
     setInfoMessage(null);
 
     try {
-      await verifyEmailCode(email, code);
-      await refreshSession();
-      navigate("/");
+      const result = await verifyEmailCode(email, code);
+      updateAuth(result.data.user);
+      navigate("/dashboard", { replace: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Unable to verify code";
       setErrorMessage(message);

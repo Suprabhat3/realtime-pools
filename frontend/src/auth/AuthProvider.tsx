@@ -9,6 +9,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   user: SessionUser | null;
   refreshSession: () => Promise<void>;
+  updateAuth: (user: SessionUser) => void;
   signOut: () => Promise<void>;
 };
 
@@ -20,6 +21,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<SessionUser | null>(null);
 
   const refreshSession = async () => {
+    setIsLoading(true);
     try {
       const session = await getSession();
       setIsAuthenticated(session.data.authenticated);
@@ -30,6 +32,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  /**
+   * Directly update auth state from a known user object.
+   * Use this after OTP verification or any flow where the user data
+   * is already available in the API response, avoiding an extra
+   * /session round-trip that can fail on cross-origin deployments.
+   */
+  const updateAuth = (user: SessionUser) => {
+    setUser(user);
+    setIsAuthenticated(true);
+    setIsLoading(false);
   };
 
   useEffect(() => {
@@ -51,6 +65,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       isAuthenticated,
       user,
       refreshSession,
+      updateAuth,
       signOut: handleSignOut
     }),
     [isLoading, isAuthenticated, user]

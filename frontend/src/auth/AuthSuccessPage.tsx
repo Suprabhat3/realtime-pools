@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "./AuthProvider";
@@ -6,19 +6,43 @@ import { useAuth } from "./AuthProvider";
 const AuthSuccessPage = () => {
   const navigate = useNavigate();
   const { refreshSession } = useAuth();
+  const [error, setError] = useState(false);
 
   useEffect(() => {
     const run = async () => {
-      await refreshSession();
-      navigate("/", { replace: true });
+      try {
+        await refreshSession();
+        navigate("/dashboard", { replace: true });
+      } catch {
+        setError(true);
+      }
     };
 
     void run();
   }, [navigate, refreshSession]);
 
+  if (error) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-brand-cream text-brand-charcoal">
+        <p className="text-sm font-semibold text-red-600">
+          Sign-in completed, but we could not load your session.
+        </p>
+        <a
+          href="/dashboard"
+          className="text-sm font-bold text-brand-crimson underline hover:text-brand-crimson-hover"
+        >
+          Go to Dashboard
+        </a>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-cream text-brand-charcoal">
-      <p className="text-sm font-semibold">Finalizing sign-in...</p>
+      <div className="flex flex-col items-center gap-3">
+        <div className="w-8 h-8 border-2 border-brand-crimson border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm font-semibold">Finalizing sign-in...</p>
+      </div>
     </div>
   );
 };
