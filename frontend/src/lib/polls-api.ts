@@ -1,14 +1,41 @@
 import { API_BASE_URL } from "./auth-api";
 
+/**
+ * Attempts to silently refresh the access token using the refresh cookie.
+ * Returns true if the refresh succeeded (new cookies are now set), false otherwise.
+ */
+const tryRefreshToken = async (): Promise<boolean> => {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/auth/refresh`, {
+      method: "POST",
+      credentials: "include"
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+};
+
 const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    ...init,
-    credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...(init?.headers ?? {})
+  const doFetch = () =>
+    fetch(`${API_BASE_URL}${path}`, {
+      ...init,
+      credentials: "include",
+      headers: {
+        "Content-Type": "application/json",
+        ...(init?.headers ?? {})
+      }
+    });
+
+  let response = await doFetch();
+
+  // If the access token is expired, try to refresh it and retry once.
+  if (response.status === 401) {
+    const refreshed = await tryRefreshToken();
+    if (refreshed) {
+      response = await doFetch();
     }
-  });
+  }
 
   if (!response.ok) {
     let message = "Request failed";

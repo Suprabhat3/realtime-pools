@@ -1,6 +1,6 @@
 # ZenPoll - Realtime Polling & Feedback Platform
 
-ZenPoll is a production-style full-stack polling platform built for the hackathon evaluation track.
+ZenPoll is a real polling platform. where user can create polls and get response from other user. It is a full-stack application built with React, TypeScript, Express, and PostgreSQL. user can see the detailed analytics and reports of the polls, user can also see the real-time updates of the polls.
 
 It supports:
 - authenticated creators
