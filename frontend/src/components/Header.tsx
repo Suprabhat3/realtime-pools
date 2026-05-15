@@ -6,12 +6,17 @@ const Header = () => {
   const { isAuthenticated, user, signOut } = useAuth();
   const navigate = useNavigate();
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
+  const headerRef = useRef<HTMLElement>(null);
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsDropdownOpen(false);
+      }
+      if (headerRef.current && !headerRef.current.contains(event.target as Node)) {
+        setIsMobileMenuOpen(false);
       }
     };
     document.addEventListener("mousedown", handleClickOutside);
@@ -24,11 +29,11 @@ const Header = () => {
   };
 
   return (
-    <header className="sticky top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100/50 shadow-sm transition-all duration-300">
-      <div className="max-w-7xl mx-auto flex justify-between items-center py-4 px-6 md:px-12">
+    <header ref={headerRef} className="sticky top-0 w-full z-50 bg-white/80 backdrop-blur-md border-b border-gray-100/50 shadow-sm transition-all duration-300">
+      <div className="max-w-7xl mx-auto flex justify-between items-center py-4 px-6 md:px-12 relative z-10">
         {/* Logo */}
         <div className="flex items-center">
-          <Link to="/" className="flex items-center group">
+          <Link to="/" className="flex items-center group" onClick={() => setIsMobileMenuOpen(false)}>
             <img src="/zenpoll-logo.png" alt="Logo" className="h-10 w-14 transition-transform duration-300 group-hover:scale-105" />
           </Link>
         </div>
@@ -85,7 +90,8 @@ const Header = () => {
         </nav>
 
         {/* Auth / Profile - Right side */}
-        <div className="flex items-center gap-5 text-sm font-semibold relative" ref={dropdownRef}>
+        <div className="flex items-center gap-3 sm:gap-5 text-sm font-semibold relative">
+          <div ref={dropdownRef} className="flex items-center gap-3 sm:gap-5 relative">
           {isAuthenticated ? (
             <>
               <button 
@@ -142,13 +148,77 @@ const Header = () => {
               </Link>
               <Link
                 to="/signup"
-                className="bg-brand-crimson hover:bg-brand-crimson-hover text-white px-6 py-2.5 font-bold rounded-full shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200"
+                className="bg-brand-crimson hover:bg-brand-crimson-hover text-white px-4 py-2 sm:px-6 sm:py-2.5 font-bold rounded-full shadow-md hover:shadow-lg transform hover:-translate-y-0.5 transition-all duration-200 text-xs sm:text-sm whitespace-nowrap"
               >
                 Sign Up
               </Link>
             </>
           )}
+          </div>
+
+          {/* Mobile Menu Toggle */}
+          <button
+            onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+            className="md:hidden flex items-center justify-center p-2 -mr-2 text-gray-600 hover:text-brand-crimson focus:outline-none transition-colors"
+            aria-label="Toggle menu"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {isMobileMenuOpen ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              )}
+            </svg>
+          </button>
         </div>
+      </div>
+
+      {/* Mobile Menu Dropdown */}
+      <div
+        className={`md:hidden absolute top-full left-0 w-full bg-white/95 backdrop-blur-md border-b border-gray-100 shadow-lg transition-all duration-300 ease-in-out overflow-hidden ${
+          isMobileMenuOpen ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
+        }`}
+      >
+        <nav className="flex flex-col py-4 px-6 space-y-4 text-sm font-bold tracking-wider uppercase text-gray-600">
+          <NavLink
+            to="/explorer"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={({ isActive }) =>
+              `block transition-colors hover:text-brand-crimson ${isActive ? "text-brand-crimson" : ""}`
+            }
+          >
+            Explorer
+          </NavLink>
+          <NavLink
+            to="/create"
+            onClick={() => setIsMobileMenuOpen(false)}
+            className={({ isActive }) =>
+              `block transition-colors hover:text-brand-crimson ${isActive ? "text-brand-crimson" : ""}`
+            }
+          >
+            Create
+          </NavLink>
+          {isAuthenticated && (
+            <NavLink
+              to="/dashboard"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className={({ isActive }) =>
+                `block transition-colors hover:text-brand-crimson ${isActive ? "text-brand-crimson" : ""}`
+              }
+            >
+              Dashboard
+            </NavLink>
+          )}
+          {!isAuthenticated && (
+            <Link
+              to="/signin"
+              onClick={() => setIsMobileMenuOpen(false)}
+              className="block text-gray-600 hover:text-brand-crimson transition-colors sm:hidden"
+            >
+              Log in
+            </Link>
+          )}
+        </nav>
       </div>
     </header>
   );
