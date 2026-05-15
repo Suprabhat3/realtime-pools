@@ -8,7 +8,11 @@ import type { AuthUser } from "../shared/auth.types";
 const ACCESS_COOKIE = "zp_access";
 const REFRESH_COOKIE = "zp_refresh";
 
-const isProduction = env.NODE_ENV === "production";
+const usesSecureCookies = env.NODE_ENV === "production" || env.FRONTEND_URL.startsWith("https://");
+const authCookieOptions = {
+  secure: usesSecureCookies,
+  sameSite: usesSecureCookies ? "none" : "lax"
+} as const;
 
 export type AccessTokenPayload = {
   sub: string;
@@ -103,16 +107,14 @@ export const getRefreshTokenFromRequest = (req: Request): string | null => {
 export const setAuthCookies = (res: Response, accessToken: string, refreshToken: string): void => {
   res.cookie(ACCESS_COOKIE, accessToken, {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    ...authCookieOptions,
     path: "/",
     maxAge: env.ACCESS_TOKEN_TTL_MINUTES * 60 * 1000
   });
 
   res.cookie(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax",
+    ...authCookieOptions,
     path: "/",
     maxAge: env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000
   });
@@ -121,12 +123,10 @@ export const setAuthCookies = (res: Response, accessToken: string, refreshToken:
 export const clearAuthCookies = (res: Response): void => {
   res.clearCookie(ACCESS_COOKIE, { 
     path: "/",
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax"
+    ...authCookieOptions
   });
   res.clearCookie(REFRESH_COOKIE, { 
     path: "/",
-    secure: isProduction,
-    sameSite: isProduction ? "none" : "lax"
+    ...authCookieOptions
   });
 };

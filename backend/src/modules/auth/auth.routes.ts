@@ -58,7 +58,7 @@ authRouter.get("/google", (req, res, next) => {
 
     res.cookie(GOOGLE_STATE_COOKIE, state, {
       httpOnly: true,
-      secure: env.NODE_ENV === "production",
+      secure: env.NODE_ENV === "production" || env.FRONTEND_URL.startsWith("https://"),
       sameSite: "lax",
       path: "/api/auth/google",
       maxAge: 10 * 60 * 1000
