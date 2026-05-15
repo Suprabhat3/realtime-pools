@@ -50,6 +50,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     void refreshSession();
   }, []);
 
+  // When polls-api detects both access + refresh tokens are rejected,
+  // it fires this event. We clear local state and send the user to sign-in.
+  useEffect(() => {
+    const handleExpired = () => {
+      setIsAuthenticated(false);
+      setUser(null);
+      const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+      window.location.href = `/signin?redirect=${redirect}`;
+    };
+    window.addEventListener("auth:expired", handleExpired);
+    return () => window.removeEventListener("auth:expired", handleExpired);
+  }, []);
+
   const handleSignOut = async () => {
     try {
       await signOut();

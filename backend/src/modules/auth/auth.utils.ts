@@ -8,11 +8,21 @@ import type { AuthUser } from "../shared/auth.types";
 const ACCESS_COOKIE = "zp_access";
 const REFRESH_COOKIE = "zp_refresh";
 
-const usesSecureCookies = env.NODE_ENV === "production" || env.FRONTEND_URL.startsWith("https://");
-const authCookieOptions = {
-  secure: usesSecureCookies,
-  sameSite: usesSecureCookies ? "none" : "lax"
-} as const;
+/**
+ * Determines cookie security settings based on the ACTUAL request protocol.
+ * req.secure is true when the request arrived over HTTPS, which works correctly
+ * on Railway because app.set("trust proxy", 1) is configured in app.ts.
+ * This avoids relying on NODE_ENV or FRONTEND_URL being set correctly in the
+ * host environment — the source of the cross-origin cookie bug.
+ */
+const getCookieOptions = (req: Request) => {
+  const secure =
+    req.secure || req.headers["x-forwarded-proto"] === "https";
+  return {
+    secure,
+    sameSite: secure ? ("none" as const) : ("lax" as const)
+  };
+};
 
 export type AccessTokenPayload = {
   sub: string;
@@ -104,29 +114,37 @@ export const getRefreshTokenFromRequest = (req: Request): string | null => {
   return null;
 };
 
-export const setAuthCookies = (res: Response, accessToken: string, refreshToken: string): void => {
+export const setAuthCookies = (
+  req: Request,
+  res: Response,
+  accessToken: string,
+  refreshToken: string
+): void => {
+  const cookieOptions = getCookieOptions(req);
+
   res.cookie(ACCESS_COOKIE, accessToken, {
     httpOnly: true,
-    ...authCookieOptions,
+    ...cookieOptions,
     path: "/",
     maxAge: env.ACCESS_TOKEN_TTL_MINUTES * 60 * 1000
   });
 
   res.cookie(REFRESH_COOKIE, refreshToken, {
     httpOnly: true,
-    ...authCookieOptions,
+    ...cookieOptions,
     path: "/",
     maxAge: env.REFRESH_TOKEN_TTL_DAYS * 24 * 60 * 60 * 1000
   });
 };
 
-export const clearAuthCookies = (res: Response): void => {
-  res.clearCookie(ACCESS_COOKIE, { 
+export const clearAuthCookies = (req: Request, res: Response): void => {
+  const cookieOptions = getCookieOptions(req);
+  res.clearCookie(ACCESS_COOKIE, {
     path: "/",
-    ...authCookieOptions
+    ...cookieOptions
   });
-  res.clearCookie(REFRESH_COOKIE, { 
+  res.clearCookie(REFRESH_COOKIE, {
     path: "/",
-    ...authCookieOptions
+    ...cookieOptions
   });
 };

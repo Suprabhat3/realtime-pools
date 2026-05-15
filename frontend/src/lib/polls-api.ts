@@ -34,6 +34,11 @@ const request = async <T>(path: string, init?: RequestInit): Promise<T> => {
     const refreshed = await tryRefreshToken();
     if (refreshed) {
       response = await doFetch();
+    } else {
+      // Both access and refresh tokens failed — session is fully expired.
+      // Notify the app so it can redirect the user to sign-in.
+      window.dispatchEvent(new CustomEvent("auth:expired"));
+      throw new Error("Session expired. Please sign in again.");
     }
   }
 

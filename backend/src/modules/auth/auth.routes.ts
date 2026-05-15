@@ -92,7 +92,7 @@ authRouter.get("/google/callback", async (req, res, next) => {
     const user = await findOrCreateGoogleUser(profile);
     const { accessToken, refreshToken } = await issueTokens(user);
 
-    setAuthCookies(res, accessToken, refreshToken);
+    setAuthCookies(req, res, accessToken, refreshToken);
     res.redirect(`${env.FRONTEND_URL.replace(/\/$/, "")}/auth/success`);
   } catch (error) {
     next(error);
@@ -133,7 +133,7 @@ authRouter.post("/sign-in/verify", async (req, res, next) => {
     const user = await verifyLoginOtp(payload.email, payload.code);
     const { accessToken, refreshToken } = await issueTokens(user);
 
-    setAuthCookies(res, accessToken, refreshToken);
+    setAuthCookies(req, res, accessToken, refreshToken);
 
     res.status(200).json({
       data: {
@@ -160,7 +160,7 @@ authRouter.post("/refresh", async (req, res, next) => {
     const user = await rotateRefreshToken(refreshToken);
     const { accessToken, refreshToken: newRefreshToken } = await issueTokens(user);
 
-    setAuthCookies(res, accessToken, newRefreshToken);
+    setAuthCookies(req, res, accessToken, newRefreshToken);
     res.status(200).json({
       data: {
         user
@@ -178,7 +178,7 @@ authRouter.post("/sign-out", async (req, res, next) => {
       await revokeRefreshToken(refreshToken);
     }
 
-    clearAuthCookies(res);
+    clearAuthCookies(req, res);
     res.status(200).json({
       message: "Signed out"
     });
