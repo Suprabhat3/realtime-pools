@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { createPoll, type CreatePollInput } from "../lib/polls-api";
+import { useAuth } from "../auth/AuthProvider";
 
 type DraftQuestion = {
   text: string;
@@ -25,6 +26,7 @@ const createEmptyQuestion = (): DraftQuestion => ({
 
 const CreatePollPage = () => {
   const navigate = useNavigate();
+  const { refreshSession } = useAuth();
 
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("");
@@ -135,7 +137,16 @@ const CreatePollPage = () => {
       const res = await createPoll(payload);
       setCreatedSlug(res.data.slug);
     } catch (err: any) {
-      setError(err.message || "Failed to create poll.");
+      const message = err?.message || "Failed to create poll.";
+
+      if (message.toLowerCase().includes("unauthorized") || message.toLowerCase().includes("session expired")) {
+        await refreshSession();
+        const redirect = encodeURIComponent(window.location.pathname + window.location.search);
+        navigate(`/signin?redirect=${redirect}`, { replace: true });
+        return;
+      }
+
+      setError(message);
     } finally {
       setLoading(false);
     }
