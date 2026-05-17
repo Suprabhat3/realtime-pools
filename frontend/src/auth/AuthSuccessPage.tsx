@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 
 import { useAuth } from "./AuthProvider";
+import { getSession } from "../lib/auth-api";
 
 const AuthSuccessPage = () => {
   const navigate = useNavigate();
@@ -12,7 +13,12 @@ const AuthSuccessPage = () => {
     const run = async () => {
       try {
         await refreshSession();
-        navigate("/dashboard", { replace: true });
+        const session = await getSession();
+        if (session.data.authenticated) {
+          navigate("/dashboard", { replace: true });
+          return;
+        }
+        navigate("/signin?error=session_missing", { replace: true });
       } catch {
         setError(true);
       }

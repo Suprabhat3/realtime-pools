@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 import { getSession, signOut } from "../lib/auth-api";
@@ -20,7 +20,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [user, setUser] = useState<SessionUser | null>(null);
 
-  const refreshSession = async () => {
+  const refreshSession = useCallback(async () => {
     setIsLoading(true);
     try {
       const session = await getSession();
@@ -32,7 +32,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, []);
 
   /**
    * Directly update auth state from a known user object.
@@ -48,7 +48,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   useEffect(() => {
     void refreshSession();
-  }, []);
+  }, [refreshSession]);
 
   // When polls-api detects both access + refresh tokens are rejected,
   // it fires this event. We clear local state and send the user to sign-in.
@@ -81,7 +81,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       updateAuth,
       signOut: handleSignOut
     }),
-    [isLoading, isAuthenticated, user]
+    [isLoading, isAuthenticated, user, refreshSession]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
