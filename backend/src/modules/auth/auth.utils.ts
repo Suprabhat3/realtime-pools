@@ -16,8 +16,11 @@ const REFRESH_COOKIE = "zp_refresh";
  * host environment — the source of the cross-origin cookie bug.
  */
 const getCookieOptions = (req: Request) => {
+  const isProduction = env.NODE_ENV === "production";
   const secure =
-    req.secure || req.headers["x-forwarded-proto"] === "https";
+    isProduction ||
+    req.secure ||
+    req.headers["x-forwarded-proto"] === "https";
   return {
     secure,
     sameSite: secure ? ("none" as const) : ("lax" as const)
